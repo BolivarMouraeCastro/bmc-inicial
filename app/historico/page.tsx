@@ -1,138 +1,421 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const mockHistory = [
-  { id: 1, client: 'Carlos Silva e Souza', company: 'TechNova Soluções S.A.', date: '2024-03-15', status: 'Concluída', type: 'Reclamatória Trabalhista - Horas Extras' },
-  { id: 2, client: 'Amanda Pereira Lima', company: 'Comercial Varejista XYZ', date: '2024-03-12', status: 'Enviada', type: 'Rescisão Indireta' },
-  { id: 3, client: 'Roberto Gomes de Oliveira', company: 'Construtora Edificar Ltda', date: '2024-03-10', status: 'Rascunho', type: 'Acidente de Trabalho' },
-  { id: 4, client: 'Fernanda Costa Almeida', company: 'Telemarketing Contact Plus', date: '2024-03-05', status: 'Concluída', type: 'Assédio Moral e Reflexos' },
-  { id: 5, client: 'José Ricardo Mendes', company: 'Indústria Metalúrgica Ferro Frio', date: '2024-02-28', status: 'Concluída', type: 'Reclamatória Trabalhista - Adicional de Insalubridade' },
-  { id: 6, client: 'Mariana Santos', company: 'Escola Educar', date: '2024-02-20', status: 'Rascunho', type: 'Reconhecimento de Vínculo Empregatício' },
-];
+interface Peticao {
+  id: string;
+  cliente: string;
+  empresa: string;
+  tipo: string;
+  data: string;
+  status: string;
+  arquivoUrl: string;
+  arquivoPathname?: string;
+  metaUrl?: string;
+}
 
 export default function Historico() {
+  const [peticoes, setPeticoes] = useState<Peticao[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todas');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   
-  const filteredHistory = mockHistory.filter(item => {
-    const matchesSearch = item.client.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.company.toLowerCase().includes(searchTerm.toLowerCase());
+  // State for modal viewing
+  const [selectedPeticao, setSelectedPeticao] = useState<Peticao | null>(null);
+  const [petitionContent, setPetitionContent] = useState<string | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  // State for item being deleted
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const fetchPeticoes = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/peticoes');
+      if (res.ok) {
+        const data = await res.json();
+        setPeticoes(data.peticoes || []);
+      } else {
+        console.error('Erro ao buscar petições:', res.statusText);
+      }
+    } catch (error) {
+      console.error('Erro de conexão ao buscar petições:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPeticoes();
+  }, []);
+
+  const handleView = async (item: Peticao) => {
+    setSelectedPeticao(item);
+    setPetitionContent(null);
+    setModalLoading(true);
+    try {
+      const res = await fetch(item.arquivoUrl);
+      if (res.ok) {
+        const text = await res.text();
+        setPetitionContent(text);
+      } else {
+        setPetitionContent('Não foi possível carregar o texto da petição.');
+      }
+    } catch (err) {
+      console.error('Erro ao carregar texto da petição:', err);
+      setPetitionContent('Erro de conexão ao carregar o conteúdo.');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleDownload = (arquivoUrl: string) => {
+    if (arquivoUrl) {
+      window.open(arquivoUrl, '_blank');
+    }
+  };
+
+  const handleDelete = async (item: Peticao) => {
+    const confirmed = window.confirm(`Tem certeza de que deseja excluir a petição do cliente "${item.cliente}"?`);
+    if (!confirmed) return;
+
+    setDeletingId(item.id);
+    try {
+      const metaUrlParam = item.metaUrl || (item.arquivoUrl ? item.arquivoUrl.replace('/peticoes/', '/peticoes-meta/') + '.json' : '');
+      const url = `/api/peticoes?arquivoUrl=${encodeURIComponent(item.arquivoUrl || '')}&metaUrl=${encodeURIComponent(metaUrlParam)}`;
+      
+      const res = await fetch(url, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setPeticoes((prev) => prev.filter((p) => p.id !== item.id));
+      } else {
+        alert('Erro ao excluir a petição. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir petição:', error);
+      alert('Erro de conexão ao excluir a petição.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredHistory = peticoes.filter((item) => {
+    const clienteMatch = item.cliente?.toLowerCase().includes(searchTerm.toLowerCase());
+    const empresaMatch = item.empresa?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = clienteMatch || empresaMatch;
+    
     const matchesStatus = statusFilter === 'Todas' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    let matchesDate = true;
+    if (startDate) {
+      const itemDate = new Date(item.data).setHours(0, 0, 0, 0);
+      const start = new Date(startDate).setHours(0, 0, 0, 0);
+      if (itemDate < start) matchesDate = false;
+    }
+    if (endDate) {
+      const itemDate = new Date(item.data).setHours(23, 59, 59, 999);
+      const end = new Date(endDate).setHours(23, 59, 59, 999);
+      if (itemDate > end) matchesDate = false;
+    }
+
+    return matchesSearch && matchesStatus && matchesDate;
   });
 
   const getStatusBadgeClass = (status: string) => {
-    switch(status) {
-      case 'Concluída': return 'badge-success bg-green-900 text-green-200';
-      case 'Rascunho': return 'badge-warning bg-yellow-900 text-yellow-200';
-      case 'Enviada': return 'badge-info bg-blue-900 text-blue-200';
-      default: return 'bg-gray-700 text-gray-200';
+    switch (status) {
+      case 'Concluída':
+        return 'badge-success';
+      case 'Rascunho':
+        return 'badge-warning';
+      case 'Enviada':
+        return 'badge-info';
+      default:
+        return 'badge-info';
     }
   };
+
+  const totalCount = peticoes.length;
+  const concluidasCount = peticoes.filter((h) => h.status === 'Concluída').length;
+  const rascunhosCount = peticoes.filter((h) => h.status === 'Rascunho').length;
+  const enviadasCount = peticoes.filter((h) => h.status === 'Enviada').length;
 
   return (
     <div className="page-container">
       <div className="page-header mb-24">
         <h1 className="text-gradient">Histórico</h1>
-        <p className="page-subtitle text-gray-400">Petições geradas anteriormente</p>
+        <p className="page-subtitle">Petições geradas anteriormente</p>
       </div>
 
-      <div className="stats-grid mb-24" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-        <div className="stat-card card p-16 border-l-4 border-gray-500">
-          <div className="stat-label text-sm text-gray-400">Total</div>
-          <div className="stat-value text-2xl font-bold">{mockHistory.length}</div>
+      {/* Stats Grid */}
+      <div className="stats-grid mb-24">
+        <div className="stat-card card">
+          <div className="stat-icon purple">📑</div>
+          <div>
+            <div className="stat-value">{totalCount}</div>
+            <div className="stat-label">Total</div>
+          </div>
         </div>
-        <div className="stat-card card p-16 border-l-4 border-green-500">
-          <div className="stat-label text-sm text-gray-400">Concluídas</div>
-          <div className="stat-value text-2xl font-bold">{mockHistory.filter(h => h.status === 'Concluída').length}</div>
+        <div className="stat-card card">
+          <div className="stat-icon green">✅</div>
+          <div>
+            <div className="stat-value">{concluidasCount}</div>
+            <div className="stat-label">Concluídas</div>
+          </div>
         </div>
-        <div className="stat-card card p-16 border-l-4 border-yellow-500">
-          <div className="stat-label text-sm text-gray-400">Rascunhos</div>
-          <div className="stat-value text-2xl font-bold">{mockHistory.filter(h => h.status === 'Rascunho').length}</div>
+        <div className="stat-card card">
+          <div className="stat-icon yellow">📝</div>
+          <div>
+            <div className="stat-value">{rascunhosCount}</div>
+            <div className="stat-label">Rascunhos</div>
+          </div>
         </div>
-        <div className="stat-card card p-16 border-l-4 border-blue-500">
-          <div className="stat-label text-sm text-gray-400">Enviadas</div>
-          <div className="stat-value text-2xl font-bold">{mockHistory.filter(h => h.status === 'Enviada').length}</div>
+        <div className="stat-card card">
+          <div className="stat-icon blue">📤</div>
+          <div>
+            <div className="stat-value">{enviadasCount}</div>
+            <div className="stat-label">Enviadas</div>
+          </div>
         </div>
       </div>
 
-      <div className="filter-bar card p-16 mb-24 flex gap-16 flex-wrap" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-        <div className="flex-1 min-w-[200px]" style={{ flex: 1 }}>
-          <input 
-            type="text" 
-            className="search-input form-input w-full p-8 rounded bg-gray-800 border border-gray-700" 
-            placeholder="🔍 Buscar por cliente ou empresa..." 
+      {/* Filter Bar */}
+      <div className="filter-bar card p-16 mb-24 flex gap-16 flex-wrap">
+        <div style={{ flex: 1, minWidth: '220px' }}>
+          <input
+            type="text"
+            className="search-input form-input"
+            placeholder="🔍 Buscar por cliente ou empresa..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: '100%' }}
           />
         </div>
         <div className="flex items-center gap-8">
-          <label className="text-sm text-gray-400">Status:</label>
-          <select 
-            className="form-select p-8 rounded bg-gray-800 border border-gray-700 text-white"
+          <label className="text-sm form-label mb-0" style={{ textTransform: 'none' }}>Status:</label>
+          <select
+            className="form-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: 'auto' }}
           >
-            <option>Todas</option>
-            <option>Concluída</option>
-            <option>Rascunho</option>
-            <option>Enviada</option>
+            <option value="Todas">Todas</option>
+            <option value="Concluída">Concluída</option>
+            <option value="Rascunho">Rascunho</option>
+            <option value="Enviada">Enviada</option>
           </select>
         </div>
         <div className="flex items-center gap-8">
-          <label className="text-sm text-gray-400">Período:</label>
-          <input type="date" className="form-input p-8 rounded bg-gray-800 border border-gray-700 text-white" />
-          <span className="text-gray-500">até</span>
-          <input type="date" className="form-input p-8 rounded bg-gray-800 border border-gray-700 text-white" />
+          <label className="text-sm form-label mb-0" style={{ textTransform: 'none' }}>Período:</label>
+          <input
+            type="date"
+            className="form-input"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            style={{ width: 'auto' }}
+          />
+          <span style={{ color: 'var(--text-muted)' }}>até</span>
+          <input
+            type="date"
+            className="form-input"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            style={{ width: 'auto' }}
+          />
         </div>
       </div>
 
-      {filteredHistory.length === 0 ? (
-        <div className="empty-state card p-48 text-center bg-gray-800 mt-24">
-          <div className="empty-state-icon text-5xl mb-16">📂</div>
-          <h3 className="empty-state-title text-xl font-bold mb-8">Nenhum histórico encontrado</h3>
-          <p className="empty-state-text text-gray-400">Ajuste os filtros ou crie uma nova petição.</p>
+      {/* Loading State */}
+      {loading ? (
+        <div className="card p-48 text-center mb-24">
+          <div className="empty-state-icon mb-16">⏳</div>
+          <h3 className="empty-state-title">Carregando histórico...</h3>
+          <p className="empty-state-text">Buscando as petições registradas no sistema.</p>
+        </div>
+      ) : filteredHistory.length === 0 ? (
+        /* Empty State */
+        <div className="empty-state card mb-24">
+          <div className="empty-state-icon">📂</div>
+          <h3 className="empty-state-title">Nenhum histórico encontrado</h3>
+          <p className="empty-state-text">Ajuste os filtros de busca ou crie uma nova petição.</p>
         </div>
       ) : (
-        <div className="table-responsive card overflow-hidden">
-          <table className="table w-full text-left" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead className="bg-gray-800 border-b border-gray-700">
-              <tr>
-                <th className="p-16 text-sm font-semibold text-gray-300">Cliente / Empresa</th>
-                <th className="p-16 text-sm font-semibold text-gray-300">Tipo de Petição</th>
-                <th className="p-16 text-sm font-semibold text-gray-300">Data</th>
-                <th className="p-16 text-sm font-semibold text-gray-300">Status</th>
-                <th className="p-16 text-sm font-semibold text-gray-300 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredHistory.map(item => (
-                <tr key={item.id} className="border-b border-gray-800 hover:bg-gray-800 transition-colors">
-                  <td className="p-16">
-                    <div className="font-bold text-white">{item.client}</div>
-                    <div className="text-sm text-gray-400">{item.company}</div>
-                  </td>
-                  <td className="p-16 text-gray-300">{item.type}</td>
-                  <td className="p-16 text-gray-400">{new Date(item.date).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-16">
-                    <span className={`badge px-8 py-4 rounded text-xs ${getStatusBadgeClass(item.status)}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="p-16 text-right">
-                    <div className="flex justify-end gap-8" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                      <button className="btn btn-sm text-blue-400 hover:text-blue-300 px-8 py-4">Visualizar</button>
-                      <button className="btn btn-sm text-yellow-400 hover:text-yellow-300 px-8 py-4">Editar</button>
-                      <button className="btn btn-sm text-green-400 hover:text-green-300 px-8 py-4">Baixar PDF</button>
-                      <button className="btn btn-sm text-red-400 hover:text-red-300 px-8 py-4">Excluir</button>
-                    </div>
-                  </td>
+        /* Petitions Table */
+        <div className="card overflow-hidden">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>Cliente / Empresa</th>
+                  <th style={{ padding: '16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>Tipo de Petição</th>
+                  <th style={{ padding: '16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>Data</th>
+                  <th style={{ padding: '16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>Status</th>
+                  <th style={{ padding: '16px', textAlign: 'right', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredHistory.map((item) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{item.cliente || 'N/I'}</div>
+                      <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.empresa || 'N/I'}</div>
+                    </td>
+                    <td style={{ padding: '16px', color: 'var(--text-primary)', fontSize: '13.5px' }}>{item.tipo}</td>
+                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                      {item.data ? new Date(item.data).toLocaleDateString('pt-BR') : '-'}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <span className={`badge ${getStatusBadgeClass(item.status)}`}>
+                        {item.status || 'Concluída'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <div className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleView(item)}
+                        >
+                          Visualizar
+                        </button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleDownload(item.arquivoUrl)}
+                        >
+                          Baixar
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          disabled={deletingId === item.id}
+                          onClick={() => handleDelete(item)}
+                        >
+                          {deletingId === item.id ? 'Excluindo...' : 'Excluir'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for viewing petition text */}
+      {selectedPeticao && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+          onClick={() => setSelectedPeticao(null)}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: '850px',
+              width: '100%',
+              maxHeight: '85vh',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: 'var(--shadow)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="card-header"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border-color)',
+              }}
+            >
+              <div>
+                <h3 className="card-title" style={{ fontSize: '16px', fontWeight: '700', margin: 0 }}>
+                  Petição - {selectedPeticao.cliente}
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {selectedPeticao.tipo} • {selectedPeticao.data ? new Date(selectedPeticao.data).toLocaleDateString('pt-BR') : ''}
+                </span>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSelectedPeticao(null)}
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div
+              className="card-body"
+              style={{
+                padding: '20px',
+                overflowY: 'auto',
+                flex: 1,
+                backgroundColor: 'var(--bg-input)',
+              }}
+            >
+              {modalLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
+                  Carregando conteúdo da petição...
+                </div>
+              ) : (
+                <div
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'Consolas, Monaco, monospace, sans-serif',
+                    fontSize: '13.5px',
+                    lineHeight: '1.6',
+                    color: 'var(--text-primary)',
+                    margin: 0,
+                  }}
+                >
+                  {petitionContent}
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '12px 20px',
+                borderTop: '1px solid var(--border-color)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                backgroundColor: 'var(--bg-card)',
+              }}
+            >
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => handleDownload(selectedPeticao.arquivoUrl)}
+              >
+                📥 Baixar Arquivo
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSelectedPeticao(null)}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
