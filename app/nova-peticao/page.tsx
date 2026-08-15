@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 const TESE_LABELS: Record<string, string> = {
   horasExtras: 'Horas Extras',
@@ -72,6 +72,7 @@ export default function NovaPeticao() {
     }
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [peticaoTexto, setPeticaoTexto] = useState('');
@@ -447,24 +448,70 @@ export default function NovaPeticao() {
               <h3 className="form-section-title">Anexar Documentos</h3>
               <p className="mb-16 text-gray-400">Arraste e solte os arquivos ou clique para selecionar.</p>
               
-              <div className="upload-area p-24 border-dashed border-2 border-gray-600 rounded text-center mb-24 cursor-pointer hover:border-blue-500">
-                <span className="text-4xl mb-8 block">📄</span>
-                <p>Arraste arquivos aqui ou <span className="text-blue-500">busque no computador</span></p>
-                <p className="text-sm text-gray-500 mt-8">PDF, JPG, PNG (Max: 10MB)</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                  }
+                }}
+                style={{ display: 'none' }}
+              />
+
+              <div
+                className="upload-area"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files) {
+                    setUploadedFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <span className="upload-icon">📄</span>
+                <p className="upload-text">Arraste arquivos aqui ou <span style={{ color: 'var(--accent-blue)' }}>busque no computador</span></p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>PDF, JPG, PNG, DOC, DOCX, TXT (Max: 10MB)</p>
               </div>
 
-              <div className="card bg-gray-800 p-16">
-                <h4 className="mb-12 font-bold">Documentos Comuns Sugeridos:</h4>
-                <ul className="flex flex-wrap gap-8">
+              <div className="card p-16" style={{ background: 'var(--bg-secondary)' }}>
+                <h4 className="mb-12" style={{ fontWeight: 600 }}>Documentos Comuns Sugeridos:</h4>
+                <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
                   {['CTPS', 'Holerites', 'Contrato de Trabalho', 'TRCT', 'Extrato FGTS', 'Atestados'].map(doc => (
-                    <li key={doc} className="badge bg-gray-700">{doc}</li>
+                    <span key={doc} className="badge" style={{ background: 'var(--bg-card)' }}>{doc}</span>
                   ))}
-                </ul>
+                </div>
               </div>
 
-              {uploadedFiles.length === 0 && (
-                <div className="empty-state mt-24 text-center">
-                  <p className="empty-state-text text-gray-500">Nenhum documento anexado ainda.</p>
+              {uploadedFiles.length > 0 ? (
+                <div className="card p-16">
+                  <h4 className="mb-12" style={{ fontWeight: 600 }}>📎 Documentos Anexados ({uploadedFiles.length})</h4>
+                  {uploadedFiles.map((file, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: idx < uploadedFiles.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                      <div>
+                        <span style={{ marginRight: '8px' }}>{file.name.endsWith('.pdf') ? '📕' : file.name.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : '📄'}</span>
+                        <span style={{ fontSize: '14px' }}>{file.name}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                          ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                      <button
+                        className="btn btn-sm"
+                        style={{ color: 'var(--accent-red)', fontSize: '12px' }}
+                        onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
+                      >
+                        ✕ Remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state" style={{ textAlign: 'center', padding: '24px' }}>
+                  <p style={{ color: 'var(--text-muted)' }}>Nenhum documento anexado ainda.</p>
                 </div>
               )}
             </div>
