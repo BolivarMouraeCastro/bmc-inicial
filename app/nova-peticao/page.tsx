@@ -39,9 +39,8 @@ export default function NovaPeticao() {
   const [loading, setLoading] = useState(false);
   const [analisando, setAnalisando] = useState(false);
   const [peticaoTexto, setPeticaoTexto] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [peticaoGerada, setPeticaoGerada] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [copiado, setCopiado] = useState(false);
   const [resumoIA, setResumoIA] = useState('');
   const [justificativas, setJustificativas] = useState<Record<string, string>>({});
   const [tesesAnalisadas, setTesesAnalisadas] = useState(false);
@@ -63,7 +62,6 @@ export default function NovaPeticao() {
     }));
   };
 
-  // Analisar documentos com IA ao entrar no Step 3
   const analisarDocumentos = useCallback(async () => {
     if (tesesAnalisadas || uploadedFiles.length === 0) return;
 
@@ -116,7 +114,7 @@ export default function NovaPeticao() {
 
     setLoading(true);
     setErrorMessage('');
-    setSuccessMessage('');
+    setPeticaoGerada(false);
 
     const tesesSelecionadas = Object.entries(formData.teses)
       .filter(([, checked]) => checked)
@@ -133,7 +131,7 @@ export default function NovaPeticao() {
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar petição.');
 
       setPeticaoTexto(data.peticao || '');
-      setSuccessMessage('Petição gerada com sucesso!');
+      setPeticaoGerada(true);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar a petição.');
     } finally {
@@ -141,18 +139,29 @@ export default function NovaPeticao() {
     }
   };
 
-  const handleCopiarTexto = async () => {
+  const handleBaixarWord = () => {
     if (!peticaoTexto) return;
-    try {
-      await navigator.clipboard.writeText(peticaoTexto);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 3000);
-    } catch (err) {
-      console.error('Erro ao copiar:', err);
-    }
+
+    const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><title>Petição Inicial - ${formData.nomeCliente}</title>
+      <style>body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.8; margin: 2cm; }</style>
+      </head><body>${peticaoTexto.replace(/\n/g, '<br>')}</body></html>
+    `;
+
+    const blob = new Blob([html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Peticao_${formData.nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const tesesSelecionadasCount = Object.values(formData.teses).filter(Boolean).length;
+  const tesesSelecionadasList = Object.entries(formData.teses)
+    .filter(([, checked]) => checked)
+    .map(([key]) => TESE_LABELS[key]);
 
   return (
     <div className="page-container">
@@ -164,7 +173,7 @@ export default function NovaPeticao() {
       <div className="wizard-container card mb-24">
         <div className="wizard-steps card-header flex gap-16">
           {[1, 2, 3].map(i => (
-            <div key={i} className={`wizard-step flex gap-8 items-center`} style={{ fontWeight: step === i ? 700 : 400, color: step === i ? 'var(--accent-blue)' : 'var(--text-muted)' }}>
+            <div key={i} className="wizard-step flex gap-8 items-center" style={{ fontWeight: step === i ? 700 : 400, color: step === i ? 'var(--accent-blue)' : 'var(--text-muted)' }}>
               <div className="wizard-step-circle badge" style={{ background: step >= i ? 'var(--accent-blue)' : 'var(--bg-input)' }}>{i}</div>
               <span className="wizard-step-label">
                 {i === 1 ? 'Cliente' : i === 2 ? 'Documentos' : 'Teses e Geração'}
@@ -176,16 +185,14 @@ export default function NovaPeticao() {
         <div className="wizard-content card-body">
           {/* STEP 1 */}
           {step === 1 && (
-            <div className="flex flex-col gap-24">
-              <div className="form-section">
-                <h3 className="form-section-title mb-12">Identificação do Cliente</h3>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                  Informe o nome do cliente. Os demais dados serão extraídos automaticamente pela IA a partir dos documentos.
-                </p>
-                <div className="form-group" style={{ maxWidth: '500px' }}>
-                  <label className="form-label">Nome Completo do Cliente *</label>
-                  <input className="form-input" type="text" name="nomeCliente" value={formData.nomeCliente} onChange={handleChange} placeholder="Ex: João da Silva Santos" />
-                </div>
+            <div className="form-section">
+              <h3 className="form-section-title mb-12">Identificação do Cliente</h3>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Informe o nome do cliente. Os demais dados serão extraídos pela IA a partir dos documentos.
+              </p>
+              <div className="form-group" style={{ maxWidth: '500px' }}>
+                <label className="form-label">Nome Completo do Cliente *</label>
+                <input className="form-input" type="text" name="nomeCliente" value={formData.nomeCliente} onChange={handleChange} placeholder="Ex: João da Silva Santos" />
               </div>
             </div>
           )}
@@ -206,38 +213,22 @@ export default function NovaPeticao() {
                 onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) setUploadedFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
                 style={{ cursor: 'pointer' }}
               >
-                <span className="upload-icon" style={{ fontSize: '24px' }}>+</span>
-                <p className="upload-text">Arraste arquivos aqui ou <span style={{ color: 'var(--accent-blue)' }}>busque no computador</span></p>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>PDF, JPG, PNG, DOC, DOCX, TXT (Max: 10MB)</p>
+                <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>+</span>
+                <p>Arraste arquivos aqui ou <span style={{ color: 'var(--accent-blue)' }}>busque no computador</span></p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>PDF, DOC, DOCX, TXT (Max: 10MB)</p>
               </div>
 
-              <div className="card p-16" style={{ background: 'var(--bg-secondary)' }}>
-                <h4 className="mb-12" style={{ fontWeight: 600 }}>Documentos sugeridos:</h4>
-                <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
-                  {['Entrevista Trabalhista', 'CTPS', 'Holerites', 'Contrato de Trabalho', 'TRCT', 'Extrato FGTS', 'Atestados'].map(doc => (
-                    <span key={doc} className="badge" style={{ background: 'var(--bg-card)' }}>{doc}</span>
-                  ))}
-                </div>
-              </div>
-
-              {uploadedFiles.length > 0 ? (
+              {uploadedFiles.length > 0 && (
                 <div className="card p-16">
                   <h4 className="mb-12" style={{ fontWeight: 600 }}>Documentos Anexados ({uploadedFiles.length})</h4>
                   {uploadedFiles.map((file, idx) => (
                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: idx < uploadedFiles.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                      <div>
-                        <span style={{ fontSize: '14px' }}>{file.name}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>({(file.size / 1024).toFixed(0)} KB)</span>
-                      </div>
+                      <span style={{ fontSize: '14px' }}>{file.name} <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>({(file.size / 1024).toFixed(0)} KB)</span></span>
                       <button className="btn btn-sm" style={{ color: 'var(--accent-red)', fontSize: '12px' }}
                         onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
                       >Remover</button>
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
-                  <p>Nenhum documento anexado ainda.</p>
                 </div>
               )}
             </div>
@@ -245,128 +236,95 @@ export default function NovaPeticao() {
 
           {/* STEP 3 */}
           {step === 3 && (
-            <div className="flex flex-col gap-24">
+            <div className="flex flex-col gap-20">
               {/* Analisando */}
               {analisando && (
-                <div className="card" style={{ border: '1px solid var(--accent-blue)', padding: '32px', textAlign: 'center' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--accent-blue)', marginBottom: '8px' }}>
-                    Analisando documentos com IA...
-                  </h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                    Identificando as teses mais adequadas ao caso. Aguarde.
-                  </p>
+                <div className="card" style={{ border: '1px solid var(--accent-blue)', padding: '24px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>Analisando documentos com IA...</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>Identificando as teses adequadas ao caso.</p>
                 </div>
               )}
 
               {/* Resumo da IA */}
               {!analisando && resumoIA && (
-                <div className="card" style={{ border: '1px solid var(--accent-green)', padding: '20px' }}>
-                  <h4 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Análise da IA</h4>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.6 }}>{resumoIA}</p>
+                <div className="card" style={{ border: '1px solid var(--accent-green)', padding: '16px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '6px' }}>Análise da IA</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>{resumoIA}</p>
                 </div>
               )}
 
-              {/* Teses como lista simples */}
+              {/* Teses - lista compacta */}
               {!analisando && (
-                <>
-                  <div>
-                    <h3 className="form-section-title" style={{ marginBottom: '4px' }}>Teses Identificadas</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      {tesesSelecionadasCount > 0
-                        ? `${tesesSelecionadasCount} tese${tesesSelecionadasCount > 1 ? 's' : ''} selecionada${tesesSelecionadasCount > 1 ? 's' : ''} para a petição. Clique para adicionar ou remover.`
-                        : 'Nenhuma tese identificada. Selecione manualmente abaixo.'}
-                    </p>
-                  </div>
+                <div>
+                  <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Teses Identificadas ({tesesSelecionadasCount})</h3>
 
-                  <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-                    {Object.entries(TESE_LABELS).map(([key, label], idx) => {
-                      const isChecked = formData.teses[key as keyof typeof formData.teses];
-                      const justificativa = justificativas[key];
-                      return (
-                        <div
-                          key={key}
-                          onClick={() => handleTeseChange(key as keyof typeof formData.teses)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px',
-                            padding: '14px 20px',
-                            cursor: 'pointer',
-                            borderBottom: idx < Object.keys(TESE_LABELS).length - 1 ? '1px solid var(--border-color)' : 'none',
-                            background: isChecked ? 'rgba(59, 130, 246, 0.06)' : 'transparent',
-                            transition: 'background 0.15s ease',
-                          }}
-                        >
-                          <div style={{
-                            width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
-                            border: isChecked ? '2px solid var(--accent-blue)' : '2px solid var(--border-color)',
-                            background: isChecked ? 'var(--accent-blue)' : 'transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#fff', fontSize: '12px', fontWeight: 700,
-                          }}>
-                            {isChecked ? '✓' : ''}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <span style={{ fontWeight: 600, fontSize: '14px' }}>{label}</span>
-                            {justificativa && (
-                              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                {justificativa}
-                              </p>
-                            )}
-                          </div>
-                          {isChecked && tesesAnalisadas && (
-                            <span style={{ fontSize: '11px', background: 'var(--accent-blue)', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>Sugerida pela IA</span>
+                  {tesesSelecionadasCount > 0 ? (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                      {tesesSelecionadasList.map((tese) => (
+                        <li key={tese} style={{ padding: '8px 0', borderBottom: '1px solid var(--border-color)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>&#10003;</span> {tese}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Nenhuma tese identificada.</p>
+                  )}
+
+                  {/* Adicionar/remover teses manualmente */}
+                  <details style={{ marginTop: '12px' }}>
+                    <summary style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--accent-blue)' }}>
+                      Ajustar teses manualmente
+                    </summary>
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {Object.entries(TESE_LABELS).map(([key, label]) => (
+                        <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', padding: '4px 0' }}>
+                          <input
+                            type="checkbox"
+                            checked={formData.teses[key as keyof typeof formData.teses]}
+                            onChange={() => handleTeseChange(key as keyof typeof formData.teses)}
+                          />
+                          {label}
+                          {justificativas[key] && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '4px' }}>— {justificativas[key]}</span>
                           )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {/* Messages */}
-              {successMessage && (
-                <div style={{ padding: '14px 20px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent-green)', borderRadius: '8px' }}>
-                  <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>{successMessage}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
 
+              {/* Erro */}
               {errorMessage && (
-                <div style={{ padding: '14px 20px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-red)', borderRadius: '8px' }}>
-                  <span style={{ color: 'var(--accent-red)' }}>{errorMessage}</span>
+                <div style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-red)', borderRadius: '8px' }}>
+                  <span style={{ color: 'var(--accent-red)', fontSize: '14px' }}>{errorMessage}</span>
                 </div>
               )}
 
-              {/* Preview */}
-              {!analisando && (
-                <div className="card" style={{ padding: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h4 style={{ fontWeight: 600 }}>Pré-visualização</h4>
-                    {peticaoTexto && (
-                      <button className="btn btn-sm btn-secondary" onClick={handleCopiarTexto}>
-                        {copiado ? 'Copiado!' : 'Copiar Texto'}
-                      </button>
-                    )}
-                  </div>
-                  <div style={{
-                    minHeight: '100px', padding: '20px', borderRadius: '8px',
-                    background: 'var(--bg-input)', border: '1px solid var(--border-color)',
-                  }}>
-                    {loading ? (
-                      <div style={{ textAlign: 'center', padding: '40px' }}>
-                        <p style={{ color: 'var(--accent-blue)', fontWeight: 600, marginBottom: '8px' }}>Gerando petição com Gemini AI...</p>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Isso pode levar até 30 segundos</p>
-                      </div>
-                    ) : peticaoTexto ? (
-                      <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', color: 'var(--text-primary)', fontSize: '13.5px', lineHeight: 1.7 }}>
-                        {peticaoTexto}
-                      </pre>
-                    ) : (
-                      <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px', fontStyle: 'italic' }}>
-                        A petição aparecerá aqui após a geração.
-                      </p>
-                    )}
-                  </div>
+              {/* Loading */}
+              {loading && (
+                <div className="card" style={{ padding: '32px', textAlign: 'center', border: '1px solid var(--accent-blue)' }}>
+                  <p style={{ color: 'var(--accent-blue)', fontWeight: 600, fontSize: '16px' }}>Gerando petição com Gemini AI...</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>Isso pode levar até 30 segundos.</p>
+                </div>
+              )}
+
+              {/* Petição gerada */}
+              {peticaoGerada && !loading && (
+                <div className="card" style={{ padding: '32px', textAlign: 'center', border: '1px solid var(--accent-green)' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent-green)', marginBottom: '8px' }}>
+                    Petição gerada com sucesso!
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+                    Petição de {formData.nomeCliente} com {tesesSelecionadasCount} tese{tesesSelecionadasCount > 1 ? 's' : ''}.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleBaixarWord}
+                    style={{ padding: '12px 32px', fontSize: '15px', fontWeight: 600 }}
+                  >
+                    Baixar como Word (.doc)
+                  </button>
                 </div>
               )}
             </div>
@@ -385,14 +343,16 @@ export default function NovaPeticao() {
               Próximo
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={handleGerarPeticao} disabled={loading || analisando}
-              style={{
-                padding: '12px 32px', fontSize: '15px', fontWeight: 700,
-                opacity: (loading || analisando) ? 0.6 : 1,
-                cursor: (loading || analisando) ? 'wait' : 'pointer',
-              }}>
-              {loading ? 'Gerando...' : 'Gerar Petição'}
-            </button>
+            !peticaoGerada && (
+              <button className="btn btn-primary" onClick={handleGerarPeticao} disabled={loading || analisando}
+                style={{
+                  padding: '12px 32px', fontSize: '15px', fontWeight: 700,
+                  opacity: (loading || analisando) ? 0.6 : 1,
+                  cursor: (loading || analisando) ? 'wait' : 'pointer',
+                }}>
+                {loading ? 'Gerando...' : 'Gerar Petição'}
+              </button>
+            )
           )}
         </div>
       </div>
