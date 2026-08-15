@@ -121,10 +121,16 @@ export default function NovaPeticao() {
       .map(([key]) => TESE_LABELS[key]);
 
     try {
+      const body = new FormData();
+      body.append('nomeCliente', formData.nomeCliente);
+      body.append('teses', JSON.stringify(tesesSelecionadas));
+
+      // Enviar todos os documentos anexados
+      uploadedFiles.forEach(file => body.append('files', file));
+
       const res = await fetch('/api/gerar-peticao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, teses: tesesSelecionadas }),
+        body,
       });
 
       const data = await res.json();
