@@ -108,7 +108,8 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      {/* Como configurar */}
+      {/* Como configurar - só mostra se não estiver conectado */}
+      {apiStatus === 'error' && (
       <div className="card mb-24">
         <div className="card-header" style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600 }}>🔑 Como configurar a API Key</h3>
@@ -142,6 +143,7 @@ export default function Configuracoes() {
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
         {/* Dados do Escritório */}
