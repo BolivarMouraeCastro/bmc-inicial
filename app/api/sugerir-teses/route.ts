@@ -56,7 +56,7 @@ REGRAS:
 - Seja criterioso: só sugira teses que realmente tenham fundamento nos fatos narrados`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
