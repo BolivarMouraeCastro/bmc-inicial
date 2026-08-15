@@ -81,7 +81,7 @@ export default function Configuracoes() {
               Google Gemini AI
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px' }}>
-              Modelo: <strong>Gemini 2.0 Flash</strong> — Motor de geração de petições
+              Modelo: <strong>Gemini 2.5 Flash</strong> — Motor de geração de petições
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{
