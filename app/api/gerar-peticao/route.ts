@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     // Salvar petição no Vercel Blob
     const nomeArquivo = `${dados.nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`;
     const blob = await put(`peticoes/${nomeArquivo}`, peticaoTexto, {
-      access: 'public',
+      access: 'private',
       contentType: 'text/plain; charset=utf-8',
     });
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     };
 
     await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify(metadata), {
-      access: 'public',
+      access: 'private',
       contentType: 'application/json',
     });
 

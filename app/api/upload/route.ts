@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      return NextResponse.json({ error: 'BLOB_READ_WRITE_TOKEN não configurado' }, { status: 500 });
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const categoria = formData.get('categoria') as string || 'Modelo';
@@ -12,8 +17,9 @@ export async function POST(request: NextRequest) {
     }
 
     const blob = await put(`base-conhecimento/${categoria}/${file.name}`, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
+      token,
     });
 
     return NextResponse.json({
@@ -28,9 +34,10 @@ export async function POST(request: NextRequest) {
         criadoEm: new Date().toISOString(),
       }
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Erro no upload:', error);
-    return NextResponse.json({ error: 'Erro ao fazer upload do arquivo' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    return NextResponse.json({ error: `Erro no upload: ${message}` }, { status: 500 });
   }
 }
 
