@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
   try {
     const dados = await request.json();
 
-    if (!dados.nomeCliente || !dados.cpf) {
+    if (!dados.nomeCliente) {
       return NextResponse.json(
-        { error: 'Nome do cliente e CPF são obrigatórios' },
+        { error: 'Nome do cliente é obrigatório' },
         { status: 400 }
       );
     }
