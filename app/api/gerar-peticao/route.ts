@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
       for (const blob of recentBlobs) {
         try {
-          const res = await fetch(blob.downloadUrl);
+          const res = await fetch(blob.url);
           const text = await res.text();
           modelosBase += `\n\n=== MODELO/REFERÊNCIA: ${blob.pathname} ===\n${text.substring(0, 5000)}`;
         } catch {

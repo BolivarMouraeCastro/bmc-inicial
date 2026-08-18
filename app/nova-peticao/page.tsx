@@ -42,7 +42,13 @@ export default function NovaPeticao() {
         body,
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('Erro no servidor. Tente novamente ou reduza o tamanho dos arquivos.');
+      }
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar petição.');
 
       setPeticaoTexto(data.peticao || '');
