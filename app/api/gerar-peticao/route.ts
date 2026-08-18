@@ -1,16 +1,15 @@
 import { put } from '@vercel/blob';
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Part } from '@google/genai';
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    // Validar API key
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'GEMINI_API_KEY não configurada. Vá em Configurações para instruções.' },
+        { error: 'GEMINI_API_KEY não configurada.' },
         { status: 500 }
       );
     }
@@ -28,60 +27,95 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome do cliente é obrigatório' }, { status: 400 });
     }
 
-    // Ler conteúdo dos documentos (apenas arquivos de texto)
-    let documentosCliente = '';
-    for (const file of files) {
-      try {
-        // Apenas arquivos de texto (txt, doc, docx podem ter texto extraível)
-        if (file.size > 5 * 1024 * 1024) continue; // Skip > 5MB
-        
-        const buffer = await file.arrayBuffer();
-        const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-        
-        // Verificar se o conteúdo tem texto legível (não é binário puro)
-        const printableRatio = text.replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, '').length / text.length;
-        if (printableRatio > 0.3 && text.length > 10) {
-          documentosCliente += `\n\n=== DOCUMENTO: ${file.name} ===\n${text.substring(0, 8000)}`;
-        } else {
-          documentosCliente += `\n\n=== DOCUMENTO: ${file.name} (arquivo binário - ${(file.size / 1024).toFixed(0)}KB, tipo: ${file.type || 'desconhecido'}) ===`;
-        }
-      } catch {
-        documentosCliente += `\n\n=== DOCUMENTO: ${file.name} (não foi possível ler) ===`;
-      }
-    }
+    // Preparar os documentos como conteúdo multimodal para o Gemini
+    const parts: Part[] = [];
 
+    // Prompt como primeira parte
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente com base nos documentos';
 
-    const prompt = `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas completas e profissionais.
+    parts.push({
+      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas completas e profissionais.
 
 TAREFA: Gere uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
 
 INSTRUÇÕES CRÍTICAS:
-1. EXTRAIA TODOS OS DADOS dos documentos abaixo (CTPS, RG, Procuração, Entrevista, etc.)
-2. Use TODOS os dados encontrados: CPF, RG, CTPS, endereço, empresa, cargo, salário, datas
-3. NÃO use "[NÃO INFORMADO]" se a informação estiver nos documentos
-4. A entrevista trabalhista contém os FATOS - use integralmente
-5. A petição deve estar PRONTA PARA USO
+1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS (PDFs, imagens, textos)
+2. EXTRAIA TODOS OS DADOS REAIS dos documentos: CPF, RG, CTPS, endereço, empresa, CNPJ, cargo, salário, datas de admissão e demissão
+3. NUNCA invente dados - use SOMENTE o que está nos documentos
+4. Se um dado não estiver em nenhum documento, escreva "[dado não localizado nos documentos]"
+5. A entrevista trabalhista contém os FATOS do caso - use integralmente na narrativa
+6. A Procuração contém a qualificação do Reclamante - use os dados dela
+7. A CTPS contém dados do contrato de trabalho - use todos
+8. A petição deve estar PRONTA PARA USO com dados REAIS
 
 TESES: ${tesesFormatadas}
 
-DOCUMENTOS DO CLIENTE:
-${documentosCliente || 'Nenhum documento anexado - gerar petição modelo'}
+Os documentos do cliente estão anexados abaixo (PDFs, imagens, textos). LEIA CADA UM COM ATENÇÃO e extraia todas as informações.
 
-ESTRUTURA:
+ESTRUTURA OBRIGATÓRIA:
 1. Endereçamento ao Juízo
-2. Qualificação COMPLETA do Reclamante (extrair dos documentos)
-3. Qualificação COMPLETA da(s) Reclamada(s) (extrair dos documentos)
-4. DOS FATOS (baseado na entrevista)
-5. DO DIREITO (fundamentação com CLT, Súmulas TST)
+2. Qualificação COMPLETA do Reclamante (nome, CPF, RG, CTPS, endereço - EXTRAIR dos documentos)
+3. Qualificação COMPLETA da(s) Reclamada(s) (razão social, CNPJ, endereço - EXTRAIR dos documentos)
+4. DOS FATOS (narrativa detalhada baseada na entrevista trabalhista)
+5. DO DIREITO (fundamentação jurídica com artigos da CLT e Súmulas do TST)
 6. DOS PEDIDOS (numerados)
 7. DO VALOR DA CAUSA
 8. Requerimentos finais
-9. Local, data e assinatura`;
+9. Local, data e assinatura
+
+IMPORTANTE: NÃO INVENTE nenhum CPF, RG, CNPJ, endereço ou dado. Use APENAS o que está nos documentos.`
+    });
+
+    // Adicionar cada documento como parte multimodal
+    let fileNames: string[] = [];
+    for (const file of files) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+
+        // Determinar MIME type
+        let mimeType = file.type || 'application/octet-stream';
+        const name = file.name.toLowerCase();
+        if (name.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (name.endsWith('.png')) mimeType = 'image/png';
+        else if (name.endsWith('.txt')) mimeType = 'text/plain';
+        else if (name.endsWith('.doc')) mimeType = 'application/msword';
+        else if (name.endsWith('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+        // Adicionar label do arquivo
+        parts.push({ text: `\n--- DOCUMENTO: ${file.name} ---` });
+
+        // Para arquivos de texto simples, enviar como texto
+        if (mimeType === 'text/plain' || name.endsWith('.txt')) {
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+          parts.push({ text: text.substring(0, 10000) });
+        } else {
+          // Para PDFs e imagens, enviar como dados inline (Gemini lê nativamente)
+          parts.push({
+            inlineData: {
+              mimeType,
+              data: base64,
+            }
+          });
+        }
+
+        fileNames.push(file.name);
+      } catch (fileError) {
+        console.error(`Erro ao processar arquivo ${file.name}:`, fileError);
+      }
+    }
+
+    console.log(`Gerando petição para ${nomeCliente} com ${fileNames.length} documentos: ${fileNames.join(', ')}`);
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: [
+        {
+          role: 'user',
+          parts,
+        }
+      ],
     });
 
     const peticaoTexto = response.text || '';
@@ -98,36 +132,27 @@ ESTRUTURA:
         contentType: 'text/plain; charset=utf-8',
       });
 
-      const metadata = {
+      await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify({
         id: Date.now().toString(),
         cliente: nomeCliente,
-        empresa: 'Extraído dos documentos',
-        tipo: `Reclamatória Trabalhista`,
+        tipo: 'Reclamatória Trabalhista',
         data: new Date().toISOString(),
         status: 'Concluída',
         arquivoUrl: blob.url,
         arquivoPathname: blob.pathname,
-      };
-
-      await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify(metadata), {
+        documentos: fileNames,
+      }), {
         access: 'private',
         contentType: 'application/json',
       });
     } catch (saveError) {
-      console.error('Erro ao salvar petição (geração OK):', saveError);
-      // Retornar a petição mesmo se falhar ao salvar
+      console.error('Erro ao salvar (petição gerada OK):', saveError);
     }
 
-    return NextResponse.json({
-      success: true,
-      peticao: peticaoTexto,
-    });
+    return NextResponse.json({ success: true, peticao: peticaoTexto });
   } catch (error: unknown) {
     console.error('Erro ao gerar petição:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    return NextResponse.json(
-      { error: `Erro ao gerar petição: ${message}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Erro: ${message}` }, { status: 500 });
   }
 }
