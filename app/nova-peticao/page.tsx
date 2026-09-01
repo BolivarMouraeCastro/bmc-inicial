@@ -100,7 +100,14 @@ export default function NovaPeticao() {
 
       const text = await res.text();
       let data;
-      try { data = JSON.parse(text); } catch { throw new Error('Erro no servidor. Tente novamente.'); }
+      try { 
+        data = JSON.parse(text); 
+      } catch { 
+        console.error("Vercel raw response:", text);
+        const isHtml = text.includes('<html');
+        const errDetail = isHtml ? 'Provável limite de tamanho de arquivos (4.5MB) ou tempo limite (10s) atingido.' : text.substring(0,100);
+        throw new Error(`Erro do servidor (${res.status}): ${errDetail}`); 
+      }
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar petição.');
 
       setPeticaoTexto(data.peticao || '');
