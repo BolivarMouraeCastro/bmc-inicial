@@ -17,9 +17,7 @@ export async function POST(request: NextRequest) {
     const files = formData.getAll('files') as File[];
     const nomeCliente = formData.get('nomeCliente') as string || '';
 
-    if (files.length === 0) {
-      return NextResponse.json({ teses: [], resumo: 'Nenhum documento para analisar.' });
-    }
+    // Os arquivos não são enviados para o servidor, apenas o nome do cliente.
 
     // 1. Buscar teses/modelos da Base de Conhecimento
     let baseConhecimento = '';
