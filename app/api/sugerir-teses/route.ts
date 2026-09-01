@@ -104,12 +104,16 @@ Analise os documentos do cliente abaixo:`
           else if (name.endsWith('.png')) mimeType = 'image/png';
 
           if (['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)) {
-            parts.push({
-              inlineData: {
-                mimeType,
-                data: Buffer.from(buffer).toString('base64'),
-              }
-            });
+            if (buffer.byteLength > 3 * 1024 * 1024) {
+              parts.push({ text: `[${file.name}: arquivo muito grande (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB) - pulado]` });
+            } else {
+              parts.push({
+                inlineData: {
+                  mimeType,
+                  data: Buffer.from(buffer).toString('base64'),
+                }
+              });
+            }
           }
         }
       } catch {
@@ -125,11 +129,23 @@ Analise os documentos do cliente abaixo:`
     const responseText = response.text || '{}';
 
     try {
-      const cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Find JSON block if it exists within markdown
+      let cleanJson = responseText;
+      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        cleanJson = jsonMatch[1];
+      } else {
+        cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      }
+      
       const resultado = JSON.parse(cleanJson);
       return NextResponse.json(resultado);
     } catch {
-      return NextResponse.json({ teses: [], resumo: 'Não foi possível analisar. Tente novamente.' });
+      // Fallback: If AI fails to return JSON, just return the text as the summary
+      return NextResponse.json({ 
+        teses: [], 
+        resumo: responseText || 'Não foi possível analisar os documentos.'
+      });
     }
   } catch (error: unknown) {
     console.error('Erro ao sugerir teses:', error);
