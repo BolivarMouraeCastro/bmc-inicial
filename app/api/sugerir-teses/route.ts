@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
       console.error('Erro ao ler base de conhecimento:', err);
     }
 
-    // 2. Preparar documentos do cliente como conteúdo multimodal
-    const parts: Part[] = [];
+    // Preparar documentos do cliente como conteúdo multimodal
+    const parts: any[] = [];
 
     parts.push({
       text: `Você é um advogado trabalhista brasileiro especializado.
@@ -82,77 +82,13 @@ Se não houver teses na base de conhecimento, sugira teses trabalhistas comuns q
 Analise os documentos do cliente abaixo:`
     });
 
-    // Processar arquivos do cliente
-    for (const file of files) {
-      try {
-        const buffer = await file.arrayBuffer();
-        const name = file.name.toLowerCase();
+    // Nós não lemos os arquivos no servidor para não estourar o limite de 4.5MB
+    // Retornamos os parts iniciais (o prompt) para o frontend anexar os arquivos localmente!
+    return NextResponse.json({ parts, nomeCliente });
 
-        parts.push({ text: `\n--- ${file.name} ---` });
-
-        if (name.endsWith('.txt')) {
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-          parts.push({ text: text.substring(0, 5000) });
-        } else if (name.endsWith('.docx')) {
-          const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-          parts.push({ text: result.value.substring(0, 5000) });
-        } else if (name.endsWith('.doc')) {
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-          const cleaned = text.replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s{3,}/g, ' ');
-          if (cleaned.trim().length > 50) parts.push({ text: cleaned.substring(0, 5000) });
-        } else {
-          let mimeType = file.type || 'application/octet-stream';
-          if (name.endsWith('.pdf')) mimeType = 'application/pdf';
-          else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
-          else if (name.endsWith('.png')) mimeType = 'image/png';
-
-          if (['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)) {
-            if (buffer.byteLength > 3 * 1024 * 1024) {
-              parts.push({ text: `[${file.name}: arquivo muito grande (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB) - pulado]` });
-            } else {
-              parts.push({
-                inlineData: {
-                  mimeType,
-                  data: Buffer.from(buffer).toString('base64'),
-                }
-              });
-            }
-          }
-        }
-      } catch {
-        // Skip
-      }
-    }
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts }],
-    });
-
-    const responseText = response.text || '{}';
-
-    try {
-      // Find JSON block if it exists within markdown
-      let cleanJson = responseText;
-      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        cleanJson = jsonMatch[1];
-      } else {
-        cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      }
-      
-      const resultado = JSON.parse(cleanJson);
-      return NextResponse.json(resultado);
-    } catch {
-      // Fallback: If AI fails to return JSON, just return the text as the summary
-      return NextResponse.json({ 
-        teses: [], 
-        resumo: responseText || 'Não foi possível analisar os documentos.'
-      });
-    }
   } catch (error: unknown) {
     console.error('Erro ao sugerir teses:', error);
     const msg = error instanceof Error ? error.message : 'Erro';
-    return NextResponse.json({ teses: [], resumo: `Erro: ${msg}` });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

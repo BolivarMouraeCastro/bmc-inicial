@@ -32,24 +32,92 @@ export default function NovaPeticao() {
     try {
       const form = new FormData();
       form.append('nomeCliente', nomeCliente);
-      // Para a sugestão de teses, enviamos APENAS a entrevista para ser mais rápido e evitar Timeout
-      entrevistaFiles.forEach(file => form.append('files', file));
-      
-      // documentacaoFiles.forEach(file => form.append('files', file)); // Removido para evitar 413 e Timeout
+      // Não enviamos os arquivos no form para evitar o limite de 4.5MB da Vercel
 
       const res = await fetch('/api/sugerir-teses', { method: 'POST', body: form });
 
-      const text = await res.text();
+      if (!res.ok) {
+        throw new Error("Falha ao preparar a análise de teses.");
+      }
+
+      const { parts } = await res.json();
+
+      // Processar TODOS os arquivos localmente (Entrevista + Holerites/Docs)
+      const processFile = async (file: File) => {
+        parts.push({ text: `\n\n--- DOCUMENTO: ${file.name} ---` });
+        
+        const name = file.name.toLowerCase();
+        let mimeType = file.type || '';
+        if (name.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (name.endsWith('.png')) mimeType = 'image/png';
+        
+        if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
+          const base64Promise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              resolve(result.split(',')[1]); // Pega só o base64
+            };
+            reader.readAsDataURL(file);
+          });
+          const base64 = await base64Promise;
+          parts.push({ inlineData: { mimeType, data: base64 } });
+        } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
+          // Extração bruta de texto para DOCX (melhor esforço)
+          const textPromise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const buffer = reader.result as ArrayBuffer;
+              const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+              const cleaned = text.replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s{3,}/g, ' ');
+              resolve(cleaned);
+            };
+            reader.readAsArrayBuffer(file);
+          });
+          const text = await textPromise;
+          parts.push({ text: text.substring(0, 15000) });
+        } else {
+          // Fallback para texto
+          const textPromise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsText(file);
+          });
+          const text = await textPromise;
+          parts.push({ text: text.substring(0, 15000) });
+        }
+      };
+
+      for (const file of entrevistaFiles) await processFile(file);
+      for (const file of documentacaoFiles) await processFile(file); // AGORA INCLUIMOS A DOCUMENTAÇÃO!
+
+      // Buscar API Key
+      const keyRes = await fetch('/api/auth/key');
+      const { key } = await keyRes.json();
+      if (!key) throw new Error("API Key do Gemini não configurada.");
+
+      // Chamar API do Google diretamente para gerar a análise (Não precisa ser stream)
+      const googleRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }] })
+      });
+
+      if (!googleRes.ok) throw new Error("Erro na API do Google Gemini");
+
+      const googleData = await googleRes.json();
+      const responseText = googleData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
       let data;
-      try { 
-        data = JSON.parse(text); 
-      } catch { 
-        // Vercel might return 504 Timeout or 413 Too Large HTML
-        const isHtml = text.includes('<html');
-        data = { 
-          teses: [], 
-          resumo: isHtml ? `Erro no servidor (${res.status}): O processo demorou muito ou os arquivos são muito pesados.` : `Erro inesperado: ${text.substring(0, 100)}` 
-        }; 
+      try {
+        let cleanJson = responseText;
+        const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) cleanJson = jsonMatch[1];
+        else cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        data = JSON.parse(cleanJson);
+      } catch (e) {
+        data = { teses: [], resumo: responseText || 'A IA não retornou um formato JSON válido.' };
       }
 
       if (data.teses && data.teses.length > 0) {
@@ -57,8 +125,9 @@ export default function NovaPeticao() {
       }
       if (data.resumo) setResumoIA(data.resumo);
       setTesesAnalisadas(true);
-    } catch {
-      setResumoIA('Não foi possível analisar os documentos.');
+    } catch (err) {
+      console.error(err);
+      setResumoIA('Não foi possível analisar os documentos. Tente reduzir o número de arquivos.');
     } finally {
       setAnalisando(false);
     }
@@ -93,9 +162,8 @@ export default function NovaPeticao() {
       const nomesT = tesesSugeridas.map(t => t.nome);
       body.append('teses', JSON.stringify(nomesT));
 
-      entrevistaFiles.forEach(file => body.append('files', file));
-      documentacaoFiles.forEach(file => body.append('files', file));
-
+      // Não anexamos 'files' ao FormData para não estourar o limite de 4.5MB da Vercel!
+      // Vamos processar tudo no frontend logo abaixo.
       const res = await fetch('/api/gerar-peticao', { method: 'POST', body });
       
       if (!res.ok) {
@@ -104,6 +172,57 @@ export default function NovaPeticao() {
       }
 
       const { parts } = await res.json();
+
+      // === PROCESSAR ARQUIVOS NO CLIENTE PARA BURLAR LIMITE DE 4.5MB ===
+      const processFile = async (file: File) => {
+        parts.push({ text: `\n\n--- DOCUMENTO: ${file.name} ---` });
+        
+        const name = file.name.toLowerCase();
+        let mimeType = file.type || '';
+        if (name.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (name.endsWith('.png')) mimeType = 'image/png';
+        
+        if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
+          const base64Promise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              resolve(result.split(',')[1]); // Pega só o base64
+            };
+            reader.readAsDataURL(file);
+          });
+          const base64 = await base64Promise;
+          parts.push({ inlineData: { mimeType, data: base64 } });
+        } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
+          // Extração bruta de texto para DOCX (melhor esforço)
+          const textPromise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const buffer = reader.result as ArrayBuffer;
+              const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+              const cleaned = text.replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s{3,}/g, ' ');
+              resolve(cleaned);
+            };
+            reader.readAsArrayBuffer(file);
+          });
+          const text = await textPromise;
+          parts.push({ text: text.substring(0, 15000) });
+        } else {
+          // Fallback para texto puro
+          const textPromise = new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsText(file);
+          });
+          const text = await textPromise;
+          parts.push({ text: text.substring(0, 15000) });
+        }
+      };
+
+      for (const file of entrevistaFiles) await processFile(file);
+      for (const file of documentacaoFiles) await processFile(file);
+      // =================================================================
 
       // Buscar API Key
       const keyRes = await fetch('/api/auth/key');
