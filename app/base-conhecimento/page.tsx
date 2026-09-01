@@ -39,6 +39,8 @@ export default function BaseConhecimento() {
   const [loading, setLoading] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState('');
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
@@ -119,6 +121,51 @@ export default function BaseConhecimento() {
       }
     } catch {
       showToast('Erro ao excluir arquivo');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocs.size === 0) return;
+    if (!confirm(`Tem certeza que deseja excluir ${selectedDocs.size} arquivo(s) selecionado(s)?`)) return;
+
+    setIsDeletingBulk(true);
+    let sucesso = 0;
+    
+    // Create an array of selected document URLs
+    const urlsToDelete = Array.from(selectedDocs);
+    
+    for (const url of urlsToDelete) {
+      try {
+        const res = await fetch(`/api/upload/delete?url=${encodeURIComponent(url)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) sucesso++;
+      } catch {
+        console.error('Erro ao excluir', url);
+      }
+    }
+
+    setIsDeletingBulk(false);
+    setSelectedDocs(new Set());
+    showToast(`✅ ${sucesso} arquivo(s) excluído(s) com sucesso!`);
+    carregarDocumentos();
+  };
+
+  const toggleSelect = (url: string) => {
+    const newSet = new Set(selectedDocs);
+    if (newSet.has(url)) {
+      newSet.delete(url);
+    } else {
+      newSet.add(url);
+    }
+    setSelectedDocs(newSet);
+  };
+
+  const toggleSelectAll = (filteredDocs: Documento[]) => {
+    if (selectedDocs.size === filteredDocs.length && filteredDocs.length > 0) {
+      setSelectedDocs(new Set());
+    } else {
+      setSelectedDocs(new Set(filteredDocs.map(d => d.url)));
     }
   };
 
@@ -212,27 +259,57 @@ export default function BaseConhecimento() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="filter-bar mb-24" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          className="search-input form-input"
-          placeholder="🔍 Buscar na base de conhecimento..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          style={{ maxWidth: '350px' }}
-        />
-        <div className="flex gap-8" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {CATEGORIAS.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategoriaFiltro(cat)}
-              className={`btn btn-sm ${categoriaFiltro === cat ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              {cat} {cat !== 'Todos' && contPorCategoria(cat) > 0 && `(${contPorCategoria(cat)})`}
-            </button>
-          ))}
+      {/* Filtros e Seleção */}
+      <div className="filter-bar mb-24" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            className="search-input form-input"
+            placeholder="🔍 Buscar na base de conhecimento..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ maxWidth: '350px' }}
+          />
+          <div className="flex gap-8" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {CATEGORIAS.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategoriaFiltro(cat)}
+                className={`btn btn-sm ${categoriaFiltro === cat ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                {cat} {cat !== 'Todos' && contPorCategoria(cat) > 0 && `(${contPorCategoria(cat)})`}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Bulk Actions */}
+        {documentosFiltrados.length > 0 && (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+              <input 
+                type="checkbox" 
+                checked={selectedDocs.size === documentosFiltrados.length && documentosFiltrados.length > 0}
+                onChange={() => toggleSelectAll(documentosFiltrados)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>
+                {selectedDocs.size > 0 ? `${selectedDocs.size} selecionado(s)` : 'Selecionar Todos'}
+              </span>
+            </label>
+            
+            {selectedDocs.size > 0 && (
+              <button 
+                onClick={handleBulkDelete}
+                className="btn btn-sm" 
+                style={{ background: 'var(--accent-red)', color: 'white', border: 'none', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+                disabled={isDeletingBulk}
+              >
+                {isDeletingBulk ? '⏳ Excluindo...' : '🗑️ Excluir Selecionados'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -269,20 +346,30 @@ export default function BaseConhecimento() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
           {documentosFiltrados.map((doc, idx) => (
-            <div key={idx} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div className="card-body">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '24px' }}>{getIconForFile(doc.nome)}</span>
-                  <span className={`badge badge-info`} style={{ fontSize: '11px' }}>{doc.categoria}</span>
+            <div key={idx} className={`card ${selectedDocs.has(doc.url) ? 'selected' : ''}`} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: selectedDocs.has(doc.url) ? '2px solid var(--accent-blue)' : undefined, transition: 'all 0.2s' }}>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'row', gap: '12px' }}>
+                <div style={{ paddingTop: '4px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedDocs.has(doc.url)}
+                    onChange={() => toggleSelect(doc.url)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
                 </div>
-                <h3 className="card-title" style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', wordBreak: 'break-word' }}>
-                  {doc.nome}
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {formatFileSize(doc.tamanho)}
-                </p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '24px' }}>{getIconForFile(doc.nome)}</span>
+                    <span className={`badge badge-info`} style={{ fontSize: '11px' }}>{doc.categoria}</span>
+                  </div>
+                  <h3 className="card-title" style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', wordBreak: 'break-word', cursor: 'pointer' }} onClick={() => toggleSelect(doc.url)}>
+                    {doc.nome}
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    {formatFileSize(doc.tamanho)}
+                  </p>
+                </div>
               </div>
-              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   {new Date(doc.criadoEm).toLocaleDateString('pt-BR')}
                 </span>
@@ -290,9 +377,6 @@ export default function BaseConhecimento() {
                   <a href={doc.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ color: 'var(--accent-blue)', fontSize: '12px' }}>
                     Abrir
                   </a>
-                  <button onClick={() => handleDelete(doc)} className="btn btn-sm" style={{ color: 'var(--accent-red)', fontSize: '12px' }}>
-                    Excluir
-                  </button>
                 </div>
               </div>
             </div>
