@@ -88,26 +88,26 @@ export async function POST(request: NextRequest) {
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
     parts.push({
-      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais.
+      text: `Você é um advogado trabalhista brasileiro altamente experiente.
 
 TAREFA: Redigir uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
 
 INSTRUÇÕES CRÍTICAS SOBRE O MODELO:
-${templateModelo ? `O ESCRITÓRIO FORNECEU UM MODELO PADRÃO (abaixo). Você DEVE manter ESTRITAMENTE a mesma estrutura, cabeçalho, formatação, e estilo de escrita. NÃO INVENTE uma estrutura nova.\n\n=== MODELO PADRÃO DO ESCRITÓRIO ===\n${templateModelo}\n======================================================\n\nO QUE VOCÊ DEVE ALTERAR NO MODELO:\n- Qualificação: Preencha com os dados reais extraídos dos documentos (CPF, RG, CTPS, endereços).\n- Dos Fatos: Escreva a narrativa com base na Entrevista Trabalhista do cliente.\n- Do Direito (Teses): Substitua as teses do modelo pelas teses deste caso (${tesesFormatadas}).\n- Dos Pedidos: Altere os pedidos e os VALORES para se adequarem exatamente à rescisão e salários deste cliente específico.` : `Não há modelo padrão. Siga a estrutura trabalhista brasileira clássica (Endereçamento, Qualificação, Fatos, Direito, Pedidos, Valor da Causa, Assinatura).`}
+${templateModelo ? `O ESCRITÓRIO FORNECEU UM MODELO PADRÃO (abaixo). Você DEVE usar este modelo APENAS como base para a ESTRUTURA, CABEÇALHO, FORMATAÇÃO e ESTILO DE ESCRITA.\n\n=== MODELO PADRÃO DO ESCRITÓRIO ===\n${templateModelo}\n======================================================\n\nATENÇÃO - REGRA ABSOLUTA DE DADOS:\nVocê é PROIBIDO de copiar nomes, datas (admissão/demissão), valores de salário, CNPJs ou fatos específicos que estejam escritos no "Modelo Padrão". O modelo contém dados de OUTROS clientes. Você DEVE OBRIGATORIAMENTE substituir todos esses dados pelos dados REAIS do cliente atual, extraídos dos documentos enviados.\n\nO QUE VOCÊ DEVE ALTERAR NO MODELO:\n1. Qualificação: Preencha com os dados reais extraídos dos documentos (CPF, RG, CTPS, endereços, CNPJ da empresa).\n2. Do Contrato de Trabalho / Fatos: Escreva a narrativa com base ÚNICA e EXCLUSIVAMENTE na Entrevista Trabalhista do cliente e nos documentos (CTPS, Holerites). PRESTE MUITA ATENÇÃO ÀS DATAS DE ADMISSÃO E DEMISSÃO DO CLIENTE.\n3. Do Direito (Teses): Substitua as teses do modelo pelas teses deste caso: ${tesesFormatadas}.\n4. Dos Pedidos: Altere os pedidos, ajustando todos os VALORES para a realidade financeira e os salários deste cliente específico.` : `Não há modelo padrão. Siga a estrutura trabalhista brasileira clássica (Endereçamento, Qualificação, Fatos, Direito, Pedidos, Valor da Causa, Assinatura).`}
 
 INSTRUÇÕES SOBRE AS TESES E BASE DE CONHECIMENTO:
 As teses identificadas para este caso são: ${tesesFormatadas}
-Utilize a Base de Conhecimento do escritório (fornecida abaixo) para redigir o tópico "Do Direito". Adote a mesma argumentação e jurisprudência fornecidas pela Base de Conhecimento.
+Utilize a Base de Conhecimento do escritório (fornecida abaixo) para embasar as teses (Do Direito). Novamente, copie APENAS a argumentação jurídica e a jurisprudência. NÃO copie fatos de clientes antigos que estejam na Base de Conhecimento.
 ${baseConhecimento ? `\nDOCUMENTOS DA BASE DE CONHECIMENTO:\n${baseConhecimento}\n` : '\n(Nenhuma base de conhecimento adicional)\n'}
 
-REGRAS GERAIS:
-1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS (Entrevista, Holerites, TRCT, etc.).
-2. NUNCA invente dados. Se faltar CPF, RG, ou endereço, use a lacuna "__________".
-3. A entrevista contém os FATOS - use-a integralmente para contar a história.
-4. Faça o cálculo/estimativa dos valores nos pedidos com base nos salários encontrados nos holerites/TRCT anexados, adequando cada caso.
+REGRAS GERAIS E ABSOLUTAS:
+1. LEIA E ANALISE MINUCIOSAMENTE A ENTREVISTA E OS DOCUMENTOS ANEXADOS.
+2. NUNCA INVENTE DADOS e NUNCA COPIE DADOS DE OUTROS CLIENTES DOS MODELOS.
+3. Se a Entrevista diz que a admissão foi "10/11/2023", você DEVE escrever "10/11/2023" na petição, e não a data que estava no modelo.
+4. Se faltar algum dado essencial (ex: endereço, CNPJ) nos documentos, coloque uma linha em branco: "__________".
 5. NUNCA retorne código JSON e NUNCA repita os comandos deste prompt. Entregue apenas a peça jurídica pronta.
 
-DOCUMENTOS DO CLIENTE ANEXADOS:`
+DOCUMENTOS DO CLIENTE (USE ESTES DADOS!):`
     });
 
     // Nenhuma leitura de arquivo de 'files' aqui para não bater no limite de 4.5MB!
