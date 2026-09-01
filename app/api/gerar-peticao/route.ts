@@ -1,9 +1,8 @@
-import { put } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Part } from '@google/genai';
-import mammoth from 'mammoth';
 
-export const maxDuration = 60;
+export const runtime = 'edge';
 
 // Tipos suportados pelo Gemini como inlineData
 const GEMINI_SUPPORTED_MIME = [
@@ -36,7 +35,6 @@ export async function POST(request: NextRequest) {
     // Fetch the template from blob if it exists
     let templateModelo = '';
     try {
-      const { list } = require('@vercel/blob');
       const token = process.env.BLOB_READ_WRITE_TOKEN;
       const { blobs } = await list({ prefix: 'modelo-peticao/', token });
       
@@ -113,19 +111,14 @@ DOCUMENTOS ANEXADOS:`
           const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
           parts.push({ text: text.substring(0, 10000) });
 
-        } else if (name.endsWith('.docx')) {
-          // DOCX: converter para texto com mammoth
-          const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-          parts.push({ text: result.value.substring(0, 10000) });
-
-        } else if (name.endsWith('.doc')) {
-          // DOC antigo: tentar extrair texto legível
+        } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
+          // DOC/DOCX: extração básica (best effort já que não podemos usar mammoth no edge)
           const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
           const cleaned = text.replace(/[^\x20-\x7E\xC0-\xFF\n\r\t]/g, ' ').replace(/\s{3,}/g, ' ');
           if (cleaned.trim().length > 50) {
             parts.push({ text: cleaned.substring(0, 10000) });
           } else {
-            parts.push({ text: '[Arquivo .doc não pôde ser lido como texto]' });
+            parts.push({ text: `[Arquivo ${file.name} não pôde ser lido perfeitamente no formato DOCX. Sugestão: converta para PDF]` });
           }
 
         } else if (GEMINI_SUPPORTED_MIME.includes(mimeType)) {
