@@ -130,9 +130,9 @@ DOCUMENTOS ANEXADOS:`
 
         } else if (GEMINI_SUPPORTED_MIME.includes(mimeType)) {
           // PDF e imagens: enviar como conteúdo multimodal
-          // Limitar a 3MB por arquivo para evitar timeout
-          if (buffer.byteLength > 3 * 1024 * 1024) {
-            parts.push({ text: `[${file.name}: arquivo muito grande (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB) - pulado]` });
+          // Limitar a 1.5MB por arquivo para evitar timeout e limite de 4.5MB do Vercel
+          if (buffer.byteLength > 1.5 * 1024 * 1024) {
+            parts.push({ text: `[${file.name}: arquivo muito grande (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB). Limite é 1.5MB - pulado]` });
           } else {
             const base64 = Buffer.from(buffer).toString('base64');
             parts.push({
