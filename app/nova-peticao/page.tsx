@@ -97,19 +97,32 @@ export default function NovaPeticao() {
       documentacaoFiles.forEach(file => body.append('files', file));
 
       const res = await fetch('/api/gerar-peticao', { method: 'POST', body });
-
+      
       if (!res.ok) {
         const text = await res.text();
-        const isHtml = text.includes('<html');
-        throw new Error(isHtml ? `Erro de conexão ou limite de arquivos (4.5MB).` : text.substring(0, 100));
+        throw new Error(`Erro ao preparar petição: ${text.substring(0, 100)}`);
       }
 
-      if (!res.body) throw new Error('Falha ao receber a resposta da IA.');
+      const { parts } = await res.json();
+
+      // Buscar API Key
+      const keyRes = await fetch('/api/auth/key');
+      const { key } = await keyRes.json();
+      if (!key) throw new Error("API Key do Gemini não configurada.");
 
       setPeticaoGerada(true);
-      setPeticaoTexto(''); // Resetar
+      setPeticaoTexto('');
 
-      const reader = res.body.getReader();
+      // Chamar API do Google diretamente (sem timeout de Vercel!)
+      const googleRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }] })
+      });
+
+      if (!googleRes.ok) throw new Error("Erro na API do Google Gemini");
+
+      const reader = googleRes.body!.getReader();
       const decoder = new TextDecoder();
       let done = false;
       let generatedText = '';
@@ -119,38 +132,27 @@ export default function NovaPeticao() {
         done = doneReading;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          generatedText += chunk;
-          setPeticaoTexto(generatedText);
+          
+          // O Google retorna chunks de JSON array [ { "candidates": [ ... ] } , ...]
+          // Precisamos parsear a stream de JSON manualmente
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.trim().startsWith('"text":')) {
+              try {
+                // Wrap in braces to make it valid JSON so we can extract the exact unescaped string
+                const obj = JSON.parse(`{ ${line.trim().replace(/,$/, '')} }`);
+                if (obj.text) {
+                  generatedText += obj.text;
+                  setPeticaoTexto(generatedText);
+                }
+              } catch (e) {
+                // Ignore parse errors on split chunks
+              }
+            }
+          }
         }
       }
 
-      // --- GERAR PARTE 2 ---
-      generatedText += '\n\n\n[GERANDO PARTE 2: DIREITO E PEDIDOS...]\n\n';
-      setPeticaoTexto(generatedText);
-
-      const res2 = await fetch('/api/gerar-peticao?parte=2', { method: 'POST', body });
-      if (!res2.ok) {
-        generatedText += '\n[ERRO AO GERAR PARTE 2]';
-        setPeticaoTexto(generatedText);
-        return;
-      }
-      
-      const reader2 = res2.body!.getReader();
-      let done2 = false;
-
-      // Remover o placeholder de carregamento da parte 2
-      generatedText = generatedText.replace('\n\n\n[GERANDO PARTE 2: DIREITO E PEDIDOS...]\n\n', '\n\n');
-
-      while (!done2) {
-        const { value, done: doneReading } = await reader2.read();
-        done2 = doneReading;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          generatedText += chunk;
-          setPeticaoTexto(generatedText);
-        }
-      }
-      
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar a petição.');
     } finally {

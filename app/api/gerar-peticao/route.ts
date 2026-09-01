@@ -51,33 +51,13 @@ export async function POST(request: NextRequest) {
       console.log('Nenhum modelo padrao encontrado', e);
     }
 
-    const parte = request.nextUrl.searchParams.get('parte') || '1';
-
-    const parts: Part[] = [];
+    const parts: any[] = [];
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
-    let estrutura = '';
-    if (parte === '1') {
-      estrutura = `GERAÇÃO DA PARTE 1 (Fatos e Qualificação):
-1. Endereçamento ao Juízo
-2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
-3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
-4. DOS FATOS (narrativa completa baseada na entrevista)
-PARE APÓS OS FATOS. NÃO GERE O DIREITO NEM OS PEDIDOS AINDA.`;
-    } else {
-      estrutura = `GERAÇÃO DA PARTE 2 (Direito e Pedidos):
-5. DO DIREITO (Fundamentação das teses: ${tesesFormatadas}, citando CLT e Súmulas TST)
-6. DOS PEDIDOS (numerados e com valores estimados se possível)
-7. DO VALOR DA CAUSA
-8. Requerimentos finais
-9. Local, data e assinatura
-COMECE DIRETAMENTE NO TÓPICO "DO DIREITO". NÃO GERE FATOS NEM QUALIFICAÇÃO.`;
-    }
-
     parts.push({
-      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas.
+      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas completas e profissionais.
 
-TAREFA: Gere UMA PARTE da petição inicial trabalhista para o cliente ${nomeCliente}.
+TAREFA: Gere uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
 
 INSTRUÇÕES CRÍTICAS:
 1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS
@@ -85,15 +65,26 @@ INSTRUÇÕES CRÍTICAS:
 3. NUNCA invente dados - use SOMENTE o que está nos documentos
 4. Se um dado não estiver nos documentos, escreva "[dado não localizado]"
 5. A entrevista trabalhista contém os FATOS - use integralmente
-6. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO e FORMATAÇÃO dele.
+6. A Procuração contém a qualificação do Reclamante
+7. A CTPS contém dados do contrato de trabalho
+8. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO, CABEÇALHO e ESTRUTURA de formatação dele.
 
 TESES: ${tesesFormatadas}
 
-${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO ===\n${templateModelo}\n======================================================\n` : ''}
+${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO/FORMATAÇÃO ===\n${templateModelo}\n======================================================\n` : ''}
 
-${estrutura}
+ESTRUTURA BÁSICA (Siga a estrutura do modelo padrão acima se houver, ou use esta):
+1. Endereçamento ao Juízo
+2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
+3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
+4. DOS FATOS (baseado na entrevista)
+5. DO DIREITO (CLT, Súmulas TST)
+6. DOS PEDIDOS (numerados)
+7. DO VALOR DA CAUSA
+8. Requerimentos finais
+9. Local, data e assinatura
 
-IMPORTANTE: NÃO INVENTE DADOS. Responda apenas com o texto da petição, sem introduções.
+IMPORTANTE: NÃO INVENTE CPF, RG, CNPJ, endereço. Use APENAS dados dos documentos.
 
 DOCUMENTOS ANEXADOS:`
     });
@@ -162,60 +153,10 @@ DOCUMENTOS ANEXADOS:`
 
     console.log(`Gerando petição: ${nomeCliente}, ${fileNames.length} docs: ${fileNames.join(', ')}`);
 
-    const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts }],
-    });
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        let fullText = '';
-        try {
-          for await (const chunk of responseStream) {
-            if (chunk.text) {
-              fullText += chunk.text;
-              controller.enqueue(encoder.encode(chunk.text));
-            }
-          }
-          
-          // Salvar petição gerada no Blob (fundo, não bloqueia o usuário)
-          try {
-            const nomeArquivo = `${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`;
-            await put(`peticoes/${nomeArquivo}`, fullText, {
-              access: 'private',
-              contentType: 'text/plain; charset=utf-8',
-            });
-            await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify({
-              id: Date.now().toString(),
-              cliente: nomeCliente,
-              data: new Date().toISOString(),
-              url: '' // Will need a read token to download later
-            }), {
-              access: 'private',
-              contentType: 'application/json',
-            });
-          } catch (saveError) {
-            console.error('Erro ao salvar petição no blob:', saveError);
-          }
-
-        } catch (error) {
-          console.error('Stream error:', error);
-          controller.enqueue(encoder.encode('\n\n[ERRO NA GERAÇÃO - Tente novamente]'));
-        }
-        controller.close();
-      }
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache',
-      },
-    });
+    return NextResponse.json({ parts, nomeCliente });
   } catch (error: unknown) {
-    console.error('Erro ao gerar petição:', error);
+    console.error('Erro ao preparar petição:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    return NextResponse.json({ error: `Erro: ${message}` }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
