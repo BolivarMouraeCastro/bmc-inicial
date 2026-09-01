@@ -245,27 +245,17 @@ export default function NovaPeticao() {
                 </div>
               )}
 
-              {/* Teses sugeridas */}
+              {/* Teses sugeridas - tópicos simples */}
               {!analisando && tesesSugeridas.length > 0 && (
                 <div>
-                  <h3 className="form-section-title" style={{ marginBottom: '12px' }}>Teses Sugeridas pela IA ({tesesSugeridas.length})</h3>
-                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Teses Sugeridas ({tesesSugeridas.length})</h3>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {tesesSugeridas.map((tese, idx) => (
-                      <div key={idx} style={{
-                        padding: '14px 20px',
-                        borderBottom: idx < tesesSugeridas.length - 1 ? '1px solid var(--border-color)' : 'none',
-                        background: 'rgba(59, 130, 246, 0.04)',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>&#10003;</span>
-                          <span style={{ fontWeight: 600, fontSize: '14px' }}>{tese.nome}</span>
-                        </div>
-                        {tese.justificativa && (
-                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '26px' }}>{tese.justificativa}</p>
-                        )}
-                      </div>
+                      <li key={idx} style={{ padding: '6px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>&#10003;</span> {tese.nome}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
 

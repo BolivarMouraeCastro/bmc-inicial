@@ -106,11 +106,16 @@ DOCUMENTOS ANEXADOS:`
           }
 
         } else if (GEMINI_SUPPORTED_MIME.includes(mimeType)) {
-          // PDF e imagens: enviar como conteúdo multimodal (Gemini lê nativamente)
-          const base64 = Buffer.from(buffer).toString('base64');
-          parts.push({
-            inlineData: { mimeType, data: base64 }
-          });
+          // PDF e imagens: enviar como conteúdo multimodal
+          // Limitar a 3MB por arquivo para evitar timeout
+          if (buffer.byteLength > 3 * 1024 * 1024) {
+            parts.push({ text: `[${file.name}: arquivo muito grande (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB) - pulado]` });
+          } else {
+            const base64 = Buffer.from(buffer).toString('base64');
+            parts.push({
+              inlineData: { mimeType, data: base64 }
+            });
+          }
 
         } else {
           // Outro formato: tentar como texto
