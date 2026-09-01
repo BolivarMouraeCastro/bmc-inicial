@@ -27,7 +27,9 @@ export default function Configuracoes() {
     setTimeout(() => setToast(''), 3000);
   };
 
-  // Verificar se a API do Gemini está funcionando
+  const [modeloAtual, setModeloAtual] = useState<{nome: string, url: string} | null>(null);
+
+  // Verificar se a API do Gemini está funcionando e carregar modelo
   useEffect(() => {
     const checkApi = async () => {
       try {
@@ -41,7 +43,19 @@ export default function Configuracoes() {
         setApiStatus('error');
       }
     };
+    
+    const loadModelo = async () => {
+      try {
+        const res = await fetch('/api/modelo-peticao');
+        const data = await res.json();
+        if (data.modelo) {
+          setModeloAtual(data.modelo);
+        }
+      } catch {}
+    };
+
     checkApi();
+    loadModelo();
   }, []);
 
   const handleEscritorioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,6 +240,86 @@ export default function Configuracoes() {
             <button className="btn btn-primary" onClick={() => showToast('✅ Preferências salvas!')}>
               Salvar Preferências
             </button>
+          </div>
+        </div>
+
+        {/* Upload de Petição Modelo */}
+        <div className="card" style={{ gridColumn: '1 / -1' }}>
+          <div className="card-header" style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600 }}>📑 Petição Modelo Padrão</h3>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 24px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              Faça o upload de um arquivo Word (.doc ou .docx) com a formatação e logo do seu escritório. 
+              A IA vai analisar a estrutura e o estilo deste arquivo para gerar todas as novas petições baseadas nele.
+            </p>
+            
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <input 
+                type="file" 
+                id="upload-modelo" 
+                accept=".doc,.docx,.pdf,.txt" 
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  
+                  showToast('⏳ Fazendo upload do modelo...');
+                  const form = new FormData();
+                  form.append('file', file);
+                  
+                  try {
+                    const res = await fetch('/api/modelo-peticao', {
+                      method: 'POST',
+                      body: form
+                    });
+                    if (res.ok) {
+                      showToast('✅ Modelo salvo! A IA usará este formato.');
+                      window.location.reload();
+                    } else {
+                      showToast('❌ Erro ao salvar modelo.');
+                    }
+                  } catch (err) {
+                    showToast('❌ Erro de conexão.');
+                  }
+                }}
+              />
+              <button 
+                className="btn btn-primary" 
+                onClick={() => document.getElementById('upload-modelo')?.click()}
+              >
+                Subir Novo Modelo
+              </button>
+              <button 
+                className="btn btn-secondary"
+                onClick={async () => {
+                  if (confirm('Tem certeza que deseja remover o modelo padrão?')) {
+                    await fetch('/api/modelo-peticao', { method: 'DELETE' });
+                    showToast('✅ Modelo removido.');
+                    window.location.reload();
+                  }
+                }}
+              >
+                Remover Modelo
+              </button>
+            </div>
+            
+            <div id="modelo-status" style={{ marginTop: '12px' }}>
+              {modeloAtual ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent-green)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>✅</span>
+                  <div>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--accent-green)', margin: 0 }}>Modelo Ativo: {modeloAtual.nome}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Todas as petições serão geradas seguindo o padrão deste documento.</p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-input)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>ℹ️</span>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Nenhum modelo padrão cadastrado. A IA usará a estrutura padrão do sistema.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

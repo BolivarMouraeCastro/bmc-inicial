@@ -33,6 +33,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome do cliente é obrigatório' }, { status: 400 });
     }
 
+    // Fetch the template from blob if it exists
+    let templateModelo = '';
+    try {
+      const { list } = require('@vercel/blob');
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      const { blobs } = await list({ prefix: 'modelo-peticao/', token });
+      
+      const txtBlob = blobs.find((b: any) => b.pathname.endsWith('_texto_extraido.txt'));
+      if (txtBlob) {
+        const res = await fetch(txtBlob.url, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          templateModelo = await res.text();
+        }
+      }
+    } catch (e) {
+      console.log('Nenhum modelo padrao encontrado', e);
+    }
+
     const parts: Part[] = [];
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
@@ -49,10 +69,13 @@ INSTRUÇÕES CRÍTICAS:
 5. A entrevista trabalhista contém os FATOS - use integralmente
 6. A Procuração contém a qualificação do Reclamante
 7. A CTPS contém dados do contrato de trabalho
+8. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO, CABEÇALHO e ESTRUTURA de formatação dele.
 
 TESES: ${tesesFormatadas}
 
-ESTRUTURA:
+${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO/FORMATAÇÃO ===\n${templateModelo}\n======================================================\n` : ''}
+
+ESTRUTURA BÁSICA (Siga a estrutura do modelo padrão acima se houver, ou use esta):
 1. Endereçamento ao Juízo
 2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
 3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
