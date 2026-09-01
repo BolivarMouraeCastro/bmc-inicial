@@ -51,46 +51,63 @@ export async function POST(request: NextRequest) {
       console.log('Nenhum modelo padrao encontrado', e);
     }
 
+    // Buscar Base de Conhecimento para embasar a petição (limitar a 10 arquivos pra não estourar contexto excessivamente)
+    let baseConhecimento = '';
+    try {
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      const { blobs } = await list({ prefix: 'base-conhecimento/', token });
+
+      // Ordenar por data de upload mais recente
+      const sortedBlobs = blobs.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+
+      const downloadPromises = sortedBlobs.slice(0, 10).map(async (blob) => {
+        try {
+          const res = await fetch(blob.url, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          });
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('text') || blob.pathname.endsWith('.txt')) {
+              const text = await res.text();
+              return `\n\n=== BASE DE CONHECIMENTO: ${blob.pathname} ===\n${text.substring(0, 3000)}`;
+            }
+          }
+        } catch {
+          return '';
+        }
+        return '';
+      });
+
+      const results = await Promise.all(downloadPromises);
+      baseConhecimento = results.join('');
+    } catch (err) {
+      console.error('Erro ao ler base de conhecimento:', err);
+    }
+
     const parts: any[] = [];
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
     parts.push({
-      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas completas e profissionais.
+      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais.
 
-TAREFA: Gere uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
+TAREFA: Redigir uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
 
-INSTRUÇÕES CRÍTICAS:
-1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS
-2. EXTRAIA TODOS OS DADOS REAIS: CPF, RG, CTPS, endereço, empresa, CNPJ, cargo, salário, datas
-3. NUNCA invente dados - use SOMENTE o que está nos documentos
-4. Se um dado não estiver nos documentos, escreva uma linha em branco: "__________"
-5. A entrevista trabalhista contém os FATOS - use integralmente
-6. A Procuração contém a qualificação do Reclamante
-7. A CTPS contém dados do contrato de trabalho
-8. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO, CABEÇALHO e ESTRUTURA de formatação dele.
+INSTRUÇÕES CRÍTICAS SOBRE O MODELO:
+${templateModelo ? `O ESCRITÓRIO FORNECEU UM MODELO PADRÃO (abaixo). Você DEVE manter ESTRITAMENTE a mesma estrutura, cabeçalho, formatação, e estilo de escrita. NÃO INVENTE uma estrutura nova.\n\n=== MODELO PADRÃO DO ESCRITÓRIO ===\n${templateModelo}\n======================================================\n\nO QUE VOCÊ DEVE ALTERAR NO MODELO:\n- Qualificação: Preencha com os dados reais extraídos dos documentos (CPF, RG, CTPS, endereços).\n- Dos Fatos: Escreva a narrativa com base na Entrevista Trabalhista do cliente.\n- Do Direito (Teses): Substitua as teses do modelo pelas teses deste caso (${tesesFormatadas}).\n- Dos Pedidos: Altere os pedidos e os VALORES para se adequarem exatamente à rescisão e salários deste cliente específico.` : `Não há modelo padrão. Siga a estrutura trabalhista brasileira clássica (Endereçamento, Qualificação, Fatos, Direito, Pedidos, Valor da Causa, Assinatura).`}
 
-TESES: ${tesesFormatadas}
+INSTRUÇÕES SOBRE AS TESES E BASE DE CONHECIMENTO:
+As teses identificadas para este caso são: ${tesesFormatadas}
+Utilize a Base de Conhecimento do escritório (fornecida abaixo) para redigir o tópico "Do Direito". Adote a mesma argumentação e jurisprudência fornecidas pela Base de Conhecimento.
+${baseConhecimento ? `\nDOCUMENTOS DA BASE DE CONHECIMENTO:\n${baseConhecimento}\n` : '\n(Nenhuma base de conhecimento adicional)\n'}
 
-${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO/FORMATAÇÃO ===\n${templateModelo}\n======================================================\n` : ''}
+REGRAS GERAIS:
+1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS (Entrevista, Holerites, TRCT, etc.).
+2. NUNCA invente dados. Se faltar CPF, RG, ou endereço, use a lacuna "__________".
+3. A entrevista contém os FATOS - use-a integralmente para contar a história.
+4. Faça o cálculo/estimativa dos valores nos pedidos com base nos salários encontrados nos holerites/TRCT anexados, adequando cada caso.
+5. NUNCA retorne código JSON e NUNCA repita os comandos deste prompt. Entregue apenas a peça jurídica pronta.
 
-ESTRUTURA BÁSICA (Siga a estrutura do modelo padrão acima se houver, ou use esta):
-1. Endereçamento ao Juízo
-2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
-3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
-4. DOS FATOS (baseado na entrevista)
-5. DO DIREITO (CLT, Súmulas TST)
-6. DOS PEDIDOS (numerados)
-7. DO VALOR DA CAUSA
-8. Requerimentos finais
-9. Local, data e assinatura
-
-IMPORTANTE: 
-- NÃO INVENTE CPF, RG, CNPJ, endereço. Use APENAS dados dos documentos.
-- NUNCA repita os comandos deste prompt na sua resposta.
-- NUNCA retorne código JSON. Escreva a peça jurídica diretamente, em texto corrido, pronta para ser impressa.
-- Aja EXCLUSIVAMENTE como o advogado redigindo a peça.
-
-DOCUMENTOS ANEXADOS:`
+DOCUMENTOS DO CLIENTE ANEXADOS:`
     });
 
     // Nenhuma leitura de arquivo de 'files' aqui para não bater no limite de 4.5MB!
