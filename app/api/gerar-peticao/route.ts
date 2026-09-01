@@ -160,33 +160,57 @@ DOCUMENTOS ANEXADOS:`
 
     console.log(`Gerando petição: ${nomeCliente}, ${fileNames.length} docs: ${fileNames.join(', ')}`);
 
-    const response = await ai.models.generateContent({
+    const responseStream = await ai.models.generateContentStream({
       model: 'gemini-2.5-flash',
       contents: [{ role: 'user', parts }],
     });
 
-    const peticaoTexto = response.text || '';
-    if (!peticaoTexto) {
-      return NextResponse.json({ error: 'A IA não retornou texto. Tente novamente.' }, { status: 500 });
-    }
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        let fullText = '';
+        try {
+          for await (const chunk of responseStream) {
+            if (chunk.text) {
+              fullText += chunk.text;
+              controller.enqueue(encoder.encode(chunk.text));
+            }
+          }
+          
+          // Salvar petição gerada no Blob (fundo, não bloqueia o usuário)
+          try {
+            const nomeArquivo = `${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`;
+            await put(`peticoes/${nomeArquivo}`, fullText, {
+              access: 'private',
+              contentType: 'text/plain; charset=utf-8',
+            });
+            await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify({
+              id: Date.now().toString(),
+              cliente: nomeCliente,
+              data: new Date().toISOString(),
+              url: '' // Will need a read token to download later
+            }), {
+              access: 'private',
+              contentType: 'application/json',
+            });
+          } catch (saveError) {
+            console.error('Erro ao salvar petição no blob:', saveError);
+          }
 
-    // Salvar no Blob
-    try {
-      const nomeArquivo = `${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`;
-      const blob = await put(`peticoes/${nomeArquivo}`, peticaoTexto, {
-        access: 'private', contentType: 'text/plain; charset=utf-8',
-      });
-      await put(`peticoes-meta/${nomeArquivo}.json`, JSON.stringify({
-        id: Date.now().toString(), cliente: nomeCliente,
-        tipo: 'Reclamatória Trabalhista', data: new Date().toISOString(),
-        status: 'Concluída', arquivoUrl: blob.url, arquivoPathname: blob.pathname,
-        documentos: fileNames,
-      }), { access: 'private', contentType: 'application/json' });
-    } catch (saveError) {
-      console.error('Erro ao salvar (petição OK):', saveError);
-    }
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.enqueue(encoder.encode('\n\n[ERRO NA GERAÇÃO - Tente novamente]'));
+        }
+        controller.close();
+      }
+    });
 
-    return NextResponse.json({ success: true, peticao: peticaoTexto });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      },
+    });
   } catch (error: unknown) {
     console.error('Erro ao gerar petição:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

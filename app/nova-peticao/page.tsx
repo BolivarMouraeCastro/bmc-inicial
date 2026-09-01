@@ -98,20 +98,32 @@ export default function NovaPeticao() {
 
       const res = await fetch('/api/gerar-peticao', { method: 'POST', body });
 
-      const text = await res.text();
-      let data;
-      try { 
-        data = JSON.parse(text); 
-      } catch { 
-        console.error("Vercel raw response:", text);
+      if (!res.ok) {
+        const text = await res.text();
         const isHtml = text.includes('<html');
-        const errDetail = isHtml ? 'Provável limite de tamanho de arquivos (4.5MB) ou tempo limite (10s) atingido.' : text.substring(0,100);
-        throw new Error(`Erro do servidor (${res.status}): ${errDetail}`); 
+        throw new Error(isHtml ? `Erro de conexão ou limite de arquivos (4.5MB).` : text.substring(0, 100));
       }
-      if (!res.ok) throw new Error(data.error || 'Erro ao gerar petição.');
 
-      setPeticaoTexto(data.peticao || '');
+      if (!res.body) throw new Error('Falha ao receber a resposta da IA.');
+
       setPeticaoGerada(true);
+      setPeticaoTexto(''); // Resetar
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let generatedText = '';
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          generatedText += chunk;
+          setPeticaoTexto(generatedText);
+        }
+      }
+      
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar a petição.');
     } finally {
