@@ -27,9 +27,8 @@ export async function POST(request: NextRequest) {
       const token = process.env.BLOB_READ_WRITE_TOKEN;
       const { blobs } = await list({ prefix: 'base-conhecimento/', token });
 
-      for (const blob of blobs.slice(0, 10)) {
+      const downloadPromises = blobs.slice(0, 10).map(async (blob) => {
         try {
-          // Para blobs privados, usar token no header
           const res = await fetch(blob.url, {
             headers: token ? { 'Authorization': `Bearer ${token}` } : {},
           });
@@ -37,13 +36,17 @@ export async function POST(request: NextRequest) {
             const contentType = res.headers.get('content-type') || '';
             if (contentType.includes('text') || blob.pathname.endsWith('.txt')) {
               const text = await res.text();
-              baseConhecimento += `\n\n=== BASE: ${blob.pathname} ===\n${text.substring(0, 3000)}`;
+              return `\n\n=== BASE: ${blob.pathname} ===\n${text.substring(0, 3000)}`;
             }
           }
         } catch {
-          // Skip individual files that fail
+          return '';
         }
-      }
+        return '';
+      });
+
+      const results = await Promise.all(downloadPromises);
+      baseConhecimento = results.join('');
     } catch (err) {
       console.error('Erro ao ler base de conhecimento:', err);
     }

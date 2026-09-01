@@ -32,14 +32,25 @@ export default function NovaPeticao() {
     try {
       const form = new FormData();
       form.append('nomeCliente', nomeCliente);
+      // Para a sugestão de teses, enviamos APENAS a entrevista para ser mais rápido e evitar Timeout
       entrevistaFiles.forEach(file => form.append('files', file));
-      documentacaoFiles.forEach(file => form.append('files', file));
+      
+      // documentacaoFiles.forEach(file => form.append('files', file)); // Removido para evitar 413 e Timeout
 
       const res = await fetch('/api/sugerir-teses', { method: 'POST', body: form });
 
       const text = await res.text();
       let data;
-      try { data = JSON.parse(text); } catch { data = { teses: [], resumo: 'Erro na análise.' }; }
+      try { 
+        data = JSON.parse(text); 
+      } catch { 
+        // Vercel might return 504 Timeout or 413 Too Large HTML
+        const isHtml = text.includes('<html');
+        data = { 
+          teses: [], 
+          resumo: isHtml ? `Erro no servidor (${res.status}): O processo demorou muito ou os arquivos são muito pesados.` : `Erro inesperado: ${text.substring(0, 100)}` 
+        }; 
+      }
 
       if (data.teses && data.teses.length > 0) {
         setTesesSugeridas(data.teses);
