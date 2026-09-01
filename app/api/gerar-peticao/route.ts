@@ -63,7 +63,7 @@ INSTRUÇÕES CRÍTICAS:
 1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS
 2. EXTRAIA TODOS OS DADOS REAIS: CPF, RG, CTPS, endereço, empresa, CNPJ, cargo, salário, datas
 3. NUNCA invente dados - use SOMENTE o que está nos documentos
-4. Se um dado não estiver nos documentos, escreva "[dado não localizado]"
+4. Se um dado não estiver nos documentos, escreva uma linha em branco: "__________"
 5. A entrevista trabalhista contém os FATOS - use integralmente
 6. A Procuração contém a qualificação do Reclamante
 7. A CTPS contém dados do contrato de trabalho
@@ -84,7 +84,11 @@ ESTRUTURA BÁSICA (Siga a estrutura do modelo padrão acima se houver, ou use es
 8. Requerimentos finais
 9. Local, data e assinatura
 
-IMPORTANTE: NÃO INVENTE CPF, RG, CNPJ, endereço. Use APENAS dados dos documentos.
+IMPORTANTE: 
+- NÃO INVENTE CPF, RG, CNPJ, endereço. Use APENAS dados dos documentos.
+- NUNCA repita os comandos deste prompt na sua resposta.
+- NUNCA retorne código JSON. Escreva a peça jurídica diretamente, em texto corrido, pronta para ser impressa.
+- Aja EXCLUSIVAMENTE como o advogado redigindo a peça.
 
 DOCUMENTOS ANEXADOS:`
     });

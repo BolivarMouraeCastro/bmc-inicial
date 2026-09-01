@@ -162,10 +162,52 @@ export default function NovaPeticao() {
 
   const handleBaixarWord = () => {
     if (!peticaoTexto) return;
+    
+    // Transformar quebras de linha em parágrafos reais para o Word aplicar o recuo
+    const paragraphs = peticaoTexto
+      .split(/\n+/)
+      .filter(p => p.trim() !== '')
+      .map(p => {
+        let text = p.trim();
+        // Limpar asteriscos de negrito do markdown para o word
+        text = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        text = text.replace(/\*(.*?)\*/g, '<i>$1</i>');
+        
+        // Detectar títulos (tudo maiúsculo e menor que 100 caracteres)
+        const isTitle = text.toUpperCase() === text && text.length < 100 && text.length > 3;
+        
+        if (isTitle || text.startsWith('#')) {
+          const cleanText = text.replace(/^#+\s*/, '');
+          return `<p class="titulo"><b>${cleanText}</b></p>`;
+        }
+        return `<p>${text}</p>`;
+      })
+      .join('');
+
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
     <head><meta charset="utf-8"><title>Petição - ${nomeCliente}</title>
-    <style>body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.8;margin:2cm;}p{margin-bottom:6pt;}</style>
-    </head><body>${peticaoTexto.replace(/\n/g, '<br>')}</body></html>`;
+    <style>
+      body { 
+        font-family: 'Times New Roman', serif; 
+        font-size: 12pt; 
+        margin: 3cm 2cm 2cm 3cm; 
+      }
+      p { 
+        text-align: justify; 
+        line-height: 1.5; 
+        margin-top: 18pt; 
+        margin-bottom: 18pt; 
+        text-indent: 3cm; 
+      }
+      /* Títulos centralizados e sem recuo (heurística básica para linhas curtas e em maiúsculo) */
+      h1, h2, h3, h4, .titulo {
+        text-align: center;
+        text-indent: 0;
+        font-weight: bold;
+      }
+    </style>
+    </head><body>${paragraphs}</body></html>`;
+    
     const blob = new Blob([html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
