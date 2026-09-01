@@ -51,13 +51,33 @@ export async function POST(request: NextRequest) {
       console.log('Nenhum modelo padrao encontrado', e);
     }
 
+    const parte = request.nextUrl.searchParams.get('parte') || '1';
+
     const parts: Part[] = [];
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
-    parts.push({
-      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas completas e profissionais.
+    let estrutura = '';
+    if (parte === '1') {
+      estrutura = `GERAÇÃO DA PARTE 1 (Fatos e Qualificação):
+1. Endereçamento ao Juízo
+2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
+3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
+4. DOS FATOS (narrativa completa baseada na entrevista)
+PARE APÓS OS FATOS. NÃO GERE O DIREITO NEM OS PEDIDOS AINDA.`;
+    } else {
+      estrutura = `GERAÇÃO DA PARTE 2 (Direito e Pedidos):
+5. DO DIREITO (Fundamentação das teses: ${tesesFormatadas}, citando CLT e Súmulas TST)
+6. DOS PEDIDOS (numerados e com valores estimados se possível)
+7. DO VALOR DA CAUSA
+8. Requerimentos finais
+9. Local, data e assinatura
+COMECE DIRETAMENTE NO TÓPICO "DO DIREITO". NÃO GERE FATOS NEM QUALIFICAÇÃO.`;
+    }
 
-TAREFA: Gere uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
+    parts.push({
+      text: `Você é um advogado trabalhista brasileiro especializado em elaborar petições iniciais trabalhistas.
+
+TAREFA: Gere UMA PARTE da petição inicial trabalhista para o cliente ${nomeCliente}.
 
 INSTRUÇÕES CRÍTICAS:
 1. LEIA E ANALISE TODOS OS DOCUMENTOS ANEXADOS
@@ -65,26 +85,15 @@ INSTRUÇÕES CRÍTICAS:
 3. NUNCA invente dados - use SOMENTE o que está nos documentos
 4. Se um dado não estiver nos documentos, escreva "[dado não localizado]"
 5. A entrevista trabalhista contém os FATOS - use integralmente
-6. A Procuração contém a qualificação do Reclamante
-7. A CTPS contém dados do contrato de trabalho
-8. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO, CABEÇALHO e ESTRUTURA de formatação dele.
+6. SE HOUVER UM MODELO PADRÃO ABAIXO, siga estritamente o ESTILO e FORMATAÇÃO dele.
 
 TESES: ${tesesFormatadas}
 
-${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO/FORMATAÇÃO ===\n${templateModelo}\n======================================================\n` : ''}
+${templateModelo ? `=== MODELO PADRÃO DO ESCRITÓRIO PARA SEGUIR ESTILO ===\n${templateModelo}\n======================================================\n` : ''}
 
-ESTRUTURA BÁSICA (Siga a estrutura do modelo padrão acima se houver, ou use esta):
-1. Endereçamento ao Juízo
-2. Qualificação COMPLETA do Reclamante (EXTRAIR dos documentos)
-3. Qualificação COMPLETA da(s) Reclamada(s) (EXTRAIR dos documentos)
-4. DOS FATOS (baseado na entrevista)
-5. DO DIREITO (CLT, Súmulas TST)
-6. DOS PEDIDOS (numerados)
-7. DO VALOR DA CAUSA
-8. Requerimentos finais
-9. Local, data e assinatura
+${estrutura}
 
-IMPORTANTE: NÃO INVENTE CPF, RG, CNPJ, endereço. Use APENAS dados dos documentos.
+IMPORTANTE: NÃO INVENTE DADOS. Responda apenas com o texto da petição, sem introduções.
 
 DOCUMENTOS ANEXADOS:`
     });

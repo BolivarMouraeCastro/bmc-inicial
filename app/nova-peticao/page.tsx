@@ -123,6 +123,33 @@ export default function NovaPeticao() {
           setPeticaoTexto(generatedText);
         }
       }
+
+      // --- GERAR PARTE 2 ---
+      generatedText += '\n\n\n[GERANDO PARTE 2: DIREITO E PEDIDOS...]\n\n';
+      setPeticaoTexto(generatedText);
+
+      const res2 = await fetch('/api/gerar-peticao?parte=2', { method: 'POST', body });
+      if (!res2.ok) {
+        generatedText += '\n[ERRO AO GERAR PARTE 2]';
+        setPeticaoTexto(generatedText);
+        return;
+      }
+      
+      const reader2 = res2.body!.getReader();
+      let done2 = false;
+
+      // Remover o placeholder de carregamento da parte 2
+      generatedText = generatedText.replace('\n\n\n[GERANDO PARTE 2: DIREITO E PEDIDOS...]\n\n', '\n\n');
+
+      while (!done2) {
+        const { value, done: doneReading } = await reader2.read();
+        done2 = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          generatedText += chunk;
+          setPeticaoTexto(generatedText);
+        }
+      }
       
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar a petição.');
