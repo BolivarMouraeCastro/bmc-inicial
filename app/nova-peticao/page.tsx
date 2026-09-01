@@ -1,6 +1,11 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+
+interface TeseSugerida {
+  nome: string;
+  justificativa: string;
+}
 
 export default function NovaPeticao() {
   const [step, setStep] = useState(1);
@@ -8,14 +13,56 @@ export default function NovaPeticao() {
   const [entrevistaFiles, setEntrevistaFiles] = useState<File[]>([]);
   const [documentacaoFiles, setDocumentacaoFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [analisando, setAnalisando] = useState(false);
   const [peticaoTexto, setPeticaoTexto] = useState('');
   const [peticaoGerada, setPeticaoGerada] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [tesesSugeridas, setTesesSugeridas] = useState<TeseSugerida[]>([]);
+  const [resumoIA, setResumoIA] = useState('');
+  const [tesesAnalisadas, setTesesAnalisadas] = useState(false);
 
   const entrevistaInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
-  const handleNext = () => setStep(prev => Math.min(prev + 1, 4));
+  // Analisar documentos ao entrar no Step 4
+  const analisarDocumentos = useCallback(async () => {
+    if (tesesAnalisadas) return;
+
+    setAnalisando(true);
+    try {
+      const form = new FormData();
+      form.append('nomeCliente', nomeCliente);
+      entrevistaFiles.forEach(file => form.append('files', file));
+      documentacaoFiles.forEach(file => form.append('files', file));
+
+      const res = await fetch('/api/sugerir-teses', { method: 'POST', body: form });
+
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { teses: [], resumo: 'Erro na análise.' }; }
+
+      if (data.teses && data.teses.length > 0) {
+        setTesesSugeridas(data.teses);
+      }
+      if (data.resumo) setResumoIA(data.resumo);
+      setTesesAnalisadas(true);
+    } catch {
+      setResumoIA('Não foi possível analisar os documentos.');
+    } finally {
+      setAnalisando(false);
+    }
+  }, [tesesAnalisadas, nomeCliente, entrevistaFiles, documentacaoFiles]);
+
+  useEffect(() => {
+    if (step === 4 && !tesesAnalisadas) {
+      analisarDocumentos();
+    }
+  }, [step, tesesAnalisadas, analisarDocumentos]);
+
+  const handleNext = () => {
+    if (step === 3) setTesesAnalisadas(false); // Reset para nova análise
+    setStep(prev => Math.min(prev + 1, 4));
+  };
   const handlePrev = () => setStep(prev => Math.max(prev - 1, 1));
 
   const handleGerarPeticao = async () => {
@@ -30,25 +77,19 @@ export default function NovaPeticao() {
     try {
       const body = new FormData();
       body.append('nomeCliente', nomeCliente);
-      body.append('teses', JSON.stringify([]));
 
-      // Enviar entrevista
+      // Enviar teses sugeridas
+      const nomesT = tesesSugeridas.map(t => t.nome);
+      body.append('teses', JSON.stringify(nomesT));
+
       entrevistaFiles.forEach(file => body.append('files', file));
-      // Enviar documentação
       documentacaoFiles.forEach(file => body.append('files', file));
 
-      const res = await fetch('/api/gerar-peticao', {
-        method: 'POST',
-        body,
-      });
+      const res = await fetch('/api/gerar-peticao', { method: 'POST', body });
 
       const text = await res.text();
       let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error('Erro no servidor. Tente novamente ou reduza o tamanho dos arquivos.');
-      }
+      try { data = JSON.parse(text); } catch { throw new Error('Erro no servidor. Tente novamente.'); }
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar petição.');
 
       setPeticaoTexto(data.peticao || '');
@@ -62,27 +103,20 @@ export default function NovaPeticao() {
 
   const handleBaixarWord = () => {
     if (!peticaoTexto) return;
-
-    const html = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-      <head><meta charset="utf-8"><title>Petição Inicial - ${nomeCliente}</title>
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.8; margin: 2cm; }
-        p { margin-bottom: 6pt; }
-      </style>
-      </head><body>${peticaoTexto.replace(/\n/g, '<br>')}</body></html>
-    `;
-
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"><title>Petição - ${nomeCliente}</title>
+    <style>body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.8;margin:2cm;}p{margin-bottom:6pt;}</style>
+    </head><body>${peticaoTexto.replace(/\n/g, '<br>')}</body></html>`;
     const blob = new Blob([html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Peticao_Inicial_${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}.doc`;
+    a.download = `Peticao_${nomeCliente.replace(/[^a-zA-Z0-9]/g, '_')}.doc`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const stepLabels = ['Cliente', 'Entrevista', 'Documentação', 'Petição'];
+  const stepLabels = ['Cliente', 'Entrevista', 'Documentação', 'Análise e Petição'];
 
   return (
     <div className="page-container">
@@ -92,7 +126,6 @@ export default function NovaPeticao() {
       </div>
 
       <div className="wizard-container card mb-24">
-        {/* Steps header */}
         <div className="card-header flex gap-16" style={{ padding: '16px 24px' }}>
           {stepLabels.map((label, i) => (
             <div key={i} className="flex gap-8 items-center" style={{ fontWeight: step === i + 1 ? 700 : 400, color: step === i + 1 ? 'var(--accent-blue)' : 'var(--text-muted)' }}>
@@ -104,19 +137,16 @@ export default function NovaPeticao() {
 
         <div className="card-body" style={{ padding: '24px' }}>
 
-          {/* STEP 1 - Nome do Cliente */}
+          {/* STEP 1 */}
           {step === 1 && (
             <div>
               <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Identificação do Cliente</h3>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '14px' }}>
-                Informe o nome completo do cliente. Os demais dados serão extraídos pela IA a partir dos documentos.
+                Informe o nome completo do cliente.
               </p>
               <div className="form-group" style={{ maxWidth: '500px' }}>
                 <label className="form-label">Nome Completo *</label>
-                <input
-                  className="form-input"
-                  type="text"
-                  value={nomeCliente}
+                <input className="form-input" type="text" value={nomeCliente}
                   onChange={(e) => setNomeCliente(e.target.value)}
                   placeholder="Ex: João da Silva Santos"
                   style={{ fontSize: '15px', padding: '12px 16px' }}
@@ -125,28 +155,23 @@ export default function NovaPeticao() {
             </div>
           )}
 
-          {/* STEP 2 - Entrevista Trabalhista */}
+          {/* STEP 2 */}
           {step === 2 && (
             <div>
               <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Entrevista Trabalhista</h3>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '14px' }}>
                 Anexe o arquivo da entrevista trabalhista. A IA usará os fatos narrados para fundamentar a petição.
               </p>
-
               <input ref={entrevistaInputRef} type="file" multiple accept=".pdf,.doc,.docx,.txt"
                 onChange={(e) => { if (e.target.files) setEntrevistaFiles(prev => [...prev, ...Array.from(e.target.files!)]); }}
-                style={{ display: 'none' }}
-              />
-
+                style={{ display: 'none' }} />
               <div className="upload-area" onClick={() => entrevistaInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) setEntrevistaFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
-                style={{ cursor: 'pointer', padding: '32px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '8px' }}
-              >
-                <p style={{ fontSize: '15px', marginBottom: '6px' }}>Clique para selecionar ou arraste o arquivo da entrevista</p>
+                style={{ cursor: 'pointer', padding: '32px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '8px' }}>
+                <p style={{ fontSize: '15px', marginBottom: '6px' }}>Clique ou arraste o arquivo da entrevista</p>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>PDF, DOC, DOCX, TXT</p>
               </div>
-
               {entrevistaFiles.length > 0 && (
                 <div style={{ marginTop: '16px' }}>
                   {entrevistaFiles.map((file, idx) => (
@@ -161,28 +186,23 @@ export default function NovaPeticao() {
             </div>
           )}
 
-          {/* STEP 3 - Documentação */}
+          {/* STEP 3 */}
           {step === 3 && (
             <div>
               <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Documentação Comprobatória</h3>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '14px' }}>
-                Anexe os documentos disponíveis do cliente. Quanto mais documentos, mais completa será a petição.
+                Anexe os documentos disponíveis. A IA analisará tudo na próxima etapa.
               </p>
-
               <input ref={docInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt"
                 onChange={(e) => { if (e.target.files) setDocumentacaoFiles(prev => [...prev, ...Array.from(e.target.files!)]); }}
-                style={{ display: 'none' }}
-              />
-
+                style={{ display: 'none' }} />
               <div className="upload-area" onClick={() => docInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files) setDocumentacaoFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
-                style={{ cursor: 'pointer', padding: '32px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '8px' }}
-              >
-                <p style={{ fontSize: '15px', marginBottom: '6px' }}>Clique para selecionar ou arraste os documentos</p>
+                style={{ cursor: 'pointer', padding: '32px', textAlign: 'center', border: '2px dashed var(--border-color)', borderRadius: '8px' }}>
+                <p style={{ fontSize: '15px', marginBottom: '6px' }}>Clique ou arraste os documentos</p>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>PDF, JPG, PNG, DOC, DOCX, TXT</p>
               </div>
-
               {documentacaoFiles.length > 0 && (
                 <div style={{ marginTop: '16px' }}>
                   {documentacaoFiles.map((file, idx) => (
@@ -194,73 +214,99 @@ export default function NovaPeticao() {
                   ))}
                 </div>
               )}
-
-              {/* Documentação sugerida */}
               <div className="card" style={{ marginTop: '20px', padding: '16px', background: 'var(--bg-secondary)' }}>
-                <h4 style={{ fontWeight: 600, marginBottom: '12px', fontSize: '14px' }}>Documentação comprobatória sugerida:</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  {[
-                    'CTPS (Carteira de Trabalho)',
-                    'RG e CPF',
-                    'Procuração',
-                    'Contrato de Trabalho',
-                    'Holerites / Contracheques',
-                    'TRCT (Termo de Rescisão)',
-                    'Extrato do FGTS',
-                    'Atestados Médicos',
-                    'Comprovante de Endereço',
-                    'Registro de Ponto',
-                    'Comunicação de Dispensa',
-                    'Cartão de Ponto',
-                  ].map(doc => (
-                    <div key={doc} style={{ fontSize: '13px', padding: '6px 0', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ color: 'var(--border-color)' }}>-</span> {doc}
-                    </div>
+                <h4 style={{ fontWeight: 600, marginBottom: '12px', fontSize: '14px' }}>Documentação sugerida:</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  {['CTPS', 'RG e CPF', 'Procuração', 'Contrato de Trabalho', 'Holerites', 'TRCT', 'Extrato do FGTS', 'Atestados Médicos', 'Comprovante de Endereço', 'Registro de Ponto'].map(doc => (
+                    <div key={doc} style={{ fontSize: '13px', padding: '4px 0', color: 'var(--text-secondary)' }}>- {doc}</div>
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 4 - Petição */}
+          {/* STEP 4 */}
           {step === 4 && (
-            <div>
-              {!peticaoGerada && !loading && (
-                <div>
-                  <h3 className="form-section-title" style={{ marginBottom: '8px' }}>Gerar Petição</h3>
-                  <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '14px' }}>
-                    Clique no botão abaixo para gerar a petição com base nos documentos anexados.
-                    Após a geração, você poderá editar o texto antes de baixar.
-                  </p>
+            <div className="flex flex-col gap-20">
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: '14px' }}><strong>Cliente:</strong> {nomeCliente || 'Não informado'}</p>
-                      <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                        {entrevistaFiles.length} entrevista(s) | {documentacaoFiles.length} documento(s) anexados
-                      </p>
-                    </div>
-                    <button className="btn btn-primary" onClick={handleGerarPeticao}
-                      style={{ padding: '14px 32px', fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                      Gerar Petição Inicial
-                    </button>
+              {/* Analisando */}
+              {analisando && (
+                <div className="card" style={{ border: '1px solid var(--accent-blue)', padding: '32px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--accent-blue)', fontWeight: 600, fontSize: '16px' }}>Analisando documentos e Base de Conhecimento...</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '6px' }}>A IA está identificando as teses aplicáveis ao caso.</p>
+                </div>
+              )}
+
+              {/* Resumo da análise */}
+              {!analisando && resumoIA && (
+                <div className="card" style={{ border: '1px solid var(--accent-green)', padding: '16px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '6px' }}>Análise da IA</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.6 }}>{resumoIA}</p>
+                </div>
+              )}
+
+              {/* Teses sugeridas */}
+              {!analisando && tesesSugeridas.length > 0 && (
+                <div>
+                  <h3 className="form-section-title" style={{ marginBottom: '12px' }}>Teses Sugeridas pela IA ({tesesSugeridas.length})</h3>
+                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    {tesesSugeridas.map((tese, idx) => (
+                      <div key={idx} style={{
+                        padding: '14px 20px',
+                        borderBottom: idx < tesesSugeridas.length - 1 ? '1px solid var(--border-color)' : 'none',
+                        background: 'rgba(59, 130, 246, 0.04)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                          <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>&#10003;</span>
+                          <span style={{ fontWeight: 600, fontSize: '14px' }}>{tese.nome}</span>
+                        </div>
+                        {tese.justificativa && (
+                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '26px' }}>{tese.justificativa}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {loading && (
-                <div style={{ padding: '48px', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--accent-blue)', fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>Gerando petição com Gemini AI...</p>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>A IA está analisando os documentos e gerando a petição. Isso pode levar até 60 segundos.</p>
+              {!analisando && tesesSugeridas.length === 0 && tesesAnalisadas && (
+                <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--text-muted)' }}>Nenhuma tese identificada. A petição será gerada com base nos documentos.</p>
                 </div>
               )}
 
+              {/* Erro */}
               {errorMessage && (
-                <div style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-red)', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--accent-red)', borderRadius: '8px' }}>
                   <span style={{ color: 'var(--accent-red)', fontSize: '14px' }}>{errorMessage}</span>
                 </div>
               )}
 
+              {/* Botão gerar */}
+              {!analisando && !peticaoGerada && !loading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '14px' }}><strong>Cliente:</strong> {nomeCliente}</p>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {entrevistaFiles.length} entrevista(s) | {documentacaoFiles.length} documento(s) | {tesesSugeridas.length} tese(s)
+                    </p>
+                  </div>
+                  <button className="btn btn-primary" onClick={handleGerarPeticao}
+                    style={{ padding: '14px 32px', fontSize: '15px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    Gerar Petição Inicial
+                  </button>
+                </div>
+              )}
+
+              {/* Loading */}
+              {loading && (
+                <div style={{ padding: '48px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--accent-blue)', fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>Gerando petição com Gemini AI...</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Pode levar até 60 segundos.</p>
+                </div>
+              )}
+
+              {/* Petição gerada - editável */}
               {peticaoGerada && !loading && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -277,23 +323,16 @@ export default function NovaPeticao() {
                     </div>
                   </div>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '12px' }}>
-                    Revise e edite o texto abaixo antes de baixar. Todas as alterações serão incluídas no download.
+                    Revise e edite o texto antes de baixar.
                   </p>
                   <textarea
                     value={peticaoTexto}
                     onChange={(e) => setPeticaoTexto(e.target.value)}
                     style={{
-                      width: '100%',
-                      minHeight: '500px',
-                      padding: '20px',
-                      fontSize: '13.5px',
-                      lineHeight: '1.8',
-                      fontFamily: 'Arial, sans-serif',
-                      background: 'var(--bg-input)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      resize: 'vertical',
+                      width: '100%', minHeight: '500px', padding: '20px',
+                      fontSize: '13.5px', lineHeight: '1.8', fontFamily: 'Arial, sans-serif',
+                      background: 'var(--bg-input)', color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)', borderRadius: '8px', resize: 'vertical',
                     }}
                   />
                 </div>
@@ -308,7 +347,6 @@ export default function NovaPeticao() {
             style={{ opacity: step === 1 ? 0.4 : 1, cursor: step === 1 ? 'not-allowed' : 'pointer', padding: '10px 24px' }}>
             Anterior
           </button>
-
           {step < 4 && (
             <button className="btn btn-primary" onClick={handleNext} style={{ padding: '10px 24px' }}>
               Próximo
