@@ -88,26 +88,54 @@ export async function POST(request: NextRequest) {
     const tesesFormatadas = teses.length > 0 ? teses.join(', ') : 'Identificar automaticamente';
 
     parts.push({
-      text: `Você é um advogado trabalhista brasileiro altamente experiente.
+      text: `Você é um advogado trabalhista brasileiro altamente experiente, contratado pelo escritório BM&C Advocacia.
 
-TAREFA: Redigir uma petição inicial trabalhista COMPLETA para o cliente ${nomeCliente}.
+TAREFA: Redigir uma petição inicial trabalhista COMPLETA e PERSONALIZADA para o cliente ${nomeCliente}.
 
-INSTRUÇÕES CRÍTICAS SOBRE O MODELO:
-${templateModelo ? `O ESCRITÓRIO FORNECEU UM MODELO PADRÃO (abaixo). Você DEVE usar este modelo APENAS como base para a ESTRUTURA, CABEÇALHO, FORMATAÇÃO e ESTILO DE ESCRITA.\n\n=== MODELO PADRÃO DO ESCRITÓRIO ===\n${templateModelo}\n======================================================\n\nATENÇÃO - REGRA ABSOLUTA DE DADOS:\nVocê é PROIBIDO de copiar nomes, datas (admissão/demissão), valores de salário, CNPJs ou fatos específicos que estejam escritos no "Modelo Padrão". O modelo contém dados de OUTROS clientes. Você DEVE OBRIGATORIAMENTE substituir todos esses dados pelos dados REAIS do cliente atual, extraídos dos documentos enviados.\n\nO QUE VOCÊ DEVE ALTERAR NO MODELO:\n1. Qualificação: Preencha com os dados reais extraídos dos documentos (CPF, RG, CTPS, endereços, CNPJ da empresa).\n2. Do Contrato de Trabalho / Fatos: Escreva a narrativa com base ÚNICA e EXCLUSIVAMENTE na Entrevista Trabalhista do cliente e nos documentos (CTPS, Holerites). PRESTE MUITA ATENÇÃO ÀS DATAS DE ADMISSÃO E DEMISSÃO DO CLIENTE.\n3. Do Direito (Teses): Substitua as teses do modelo pelas teses deste caso: ${tesesFormatadas}.\n4. Dos Pedidos: Altere os pedidos, ajustando todos os VALORES para a realidade financeira e os salários deste cliente específico.` : `Não há modelo padrão. Siga a estrutura trabalhista brasileira clássica (Endereçamento, Qualificação, Fatos, Direito, Pedidos, Valor da Causa, Assinatura).`}
+═══════════════════════════════════════════════════════
+COMO VOCÊ DEVE TRABALHAR (FLUXO OBRIGATÓRIO):
+═══════════════════════════════════════════════════════
 
-INSTRUÇÕES SOBRE AS TESES E BASE DE CONHECIMENTO:
-As teses identificadas para este caso são: ${tesesFormatadas}
-Utilize a Base de Conhecimento do escritório (fornecida abaixo) para embasar as teses (Do Direito). Novamente, copie APENAS a argumentação jurídica e a jurisprudência. NÃO copie fatos de clientes antigos que estejam na Base de Conhecimento.
-${baseConhecimento ? `\nDOCUMENTOS DA BASE DE CONHECIMENTO:\n${baseConhecimento}\n` : '\n(Nenhuma base de conhecimento adicional)\n'}
+PASSO 1 - LEIA OS DOCUMENTOS DO CLIENTE:
+Abaixo estão anexados os documentos do cliente (Ficha de Entrevista Trabalhista, Holerites, TRCT, CTPS, etc.). Leia TODOS com atenção máxima. Extraia:
+- Nome completo, CPF, RG, CTPS, endereço, estado civil, profissão
+- Nome/Razão Social da empresa, CNPJ, endereço
+- Datas REAIS de admissão e demissão
+- Salário real (do holerite ou TRCT)
+- Todos os fatos narrados na entrevista (o que aconteceu, reclamações, abusos, irregularidades)
 
-REGRAS GERAIS E ABSOLUTAS:
-1. LEIA E ANALISE MINUCIOSAMENTE A ENTREVISTA E OS DOCUMENTOS ANEXADOS.
-2. NUNCA INVENTE DADOS e NUNCA COPIE DADOS DE OUTROS CLIENTES DOS MODELOS.
-3. Se a Entrevista diz que a admissão foi "10/11/2023", você DEVE escrever "10/11/2023" na petição, e não a data que estava no modelo.
-4. Se faltar algum dado essencial (ex: endereço, CNPJ) nos documentos, coloque uma linha em branco: "__________".
-5. NUNCA retorne código JSON e NUNCA repita os comandos deste prompt. Entregue apenas a peça jurídica pronta.
+PASSO 2 - LEIA O MODELO PADRÃO DO ESCRITÓRIO:
+${templateModelo ? `O escritório forneceu um MODELO PADRÃO DE PETIÇÃO que contém TODAS AS TESES POSSÍVEIS que o escritório costuma usar. Este modelo é como um "cardápio completo" de teses.\n\n=== MODELO PADRÃO (CARDÁPIO DE TESES) ===\n${templateModelo}\n=== FIM DO MODELO ===` : 'Nenhum modelo padrão foi fornecido. Use a estrutura trabalhista brasileira clássica.'}
 
-DOCUMENTOS DO CLIENTE (USE ESTES DADOS!):`
+PASSO 3 - SELECIONE AS TESES APLICÁVEIS:
+Compare os FATOS da entrevista do cliente com as TESES disponíveis no Modelo Padrão. Selecione APENAS as teses que se encaixam no caso deste cliente específico. Exemplos:
+- Se o cliente relata que não recebia horas extras → inclua a tese de horas extras do modelo
+- Se o cliente relata assédio moral → inclua a tese de dano moral do modelo
+- Se o cliente foi demitido por justa causa indevida → inclua a tese de reversão de justa causa
+- Se uma tese do modelo NÃO tem relação com os fatos do cliente → NÃO inclua essa tese
+${teses.length > 0 ? `\nTeses pré-selecionadas pelo sistema (considere incluí-las): ${teses.join(', ')}` : ''}
+
+PASSO 4 - GERE A PETIÇÃO ADAPTADA:
+Escreva a petição seguindo a MESMA ESTRUTURA, CABEÇALHO, FORMATAÇÃO e ESTILO DE ESCRITA do Modelo Padrão, mas:
+- QUALIFICAÇÃO: Use os dados REAIS do cliente (extraídos dos documentos, NUNCA do modelo)
+- DOS FATOS: Narre a história REAL do cliente baseada na entrevista (NUNCA copie os fatos do modelo)
+- DO DIREITO: Use APENAS as teses selecionadas no Passo 3, com a mesma argumentação jurídica e estilo do modelo
+- DOS PEDIDOS: Liste apenas os pedidos correspondentes às teses selecionadas, com VALORES calculados com base no salário REAL do cliente
+- VALOR DA CAUSA: Calcule com base nos pedidos reais deste cliente
+
+${baseConhecimento ? `\nBASE DE CONHECIMENTO ADICIONAL DO ESCRITÓRIO (use para complementar a argumentação jurídica):\n${baseConhecimento}\n` : ''}
+
+═══════════════════════════════════════════════════════
+REGRAS ABSOLUTAS:
+═══════════════════════════════════════════════════════
+1. NUNCA copie nomes, CPFs, CNPJs, datas ou valores que estejam no Modelo Padrão. Esses dados são de OUTRO cliente.
+2. TODOS os dados factuais (datas de admissão/demissão, salário, endereço) devem vir EXCLUSIVAMENTE dos documentos anexados do cliente.
+3. Se um dado essencial não estiver nos documentos, use "__________" (lacuna).
+4. Adapte os valores dos pedidos ao salário REAL encontrado nos documentos deste cliente.
+5. NÃO inclua teses que não tenham relação com os fatos narrados na entrevista.
+6. NUNCA retorne JSON, código, ou comandos. Entregue APENAS a petição pronta, em texto corrido, pronta para impressão.
+
+DOCUMENTOS DO CLIENTE ${nomeCliente} (LEIA TUDO ABAIXO):`
     });
 
     // Nenhuma leitura de arquivo de 'files' aqui para não bater no limite de 4.5MB!
