@@ -93,49 +93,59 @@ export async function POST(request: NextRequest) {
 TAREFA: Redigir uma petição inicial trabalhista COMPLETA e PERSONALIZADA para o cliente ${nomeCliente}.
 
 ═══════════════════════════════════════════════════════
-COMO VOCÊ DEVE TRABALHAR (FLUXO OBRIGATÓRIO):
+⚠️ REGRA #1 - A ENTREVISTA É O CARRO-CHEFE ⚠️
 ═══════════════════════════════════════════════════════
 
-PASSO 1 - LEIA OS DOCUMENTOS DO CLIENTE:
-Abaixo estão anexados os documentos do cliente (Ficha de Entrevista Trabalhista, Holerites, TRCT, CTPS, etc.). Leia TODOS com atenção máxima. Extraia:
-- Nome completo, CPF, RG, CTPS, endereço, estado civil, profissão
-- Nome/Razão Social da empresa, CNPJ, endereço
-- Datas REAIS de admissão e demissão
-- Salário real (do holerite ou TRCT)
-- Todos os fatos narrados na entrevista (o que aconteceu, reclamações, abusos, irregularidades)
+A Ficha de Entrevista Trabalhista do cliente é o documento MAIS IMPORTANTE de todos. Ela define:
+- Quais FATOS devem constar na petição (TODOS, sem exceção)
+- Quais PEDIDOS devem ser feitos (somente os que decorrem dos fatos da entrevista)
+- Quais TESES jurídicas se aplicam ao caso
 
-PASSO 2 - LEIA O MODELO PADRÃO DO ESCRITÓRIO:
-${templateModelo ? `O escritório forneceu um MODELO PADRÃO DE PETIÇÃO que contém TODAS AS TESES POSSÍVEIS que o escritório costuma usar. Este modelo é como um "cardápio completo" de teses.\n\n=== MODELO PADRÃO (CARDÁPIO DE TESES) ===\n${templateModelo}\n=== FIM DO MODELO ===` : 'Nenhum modelo padrão foi fornecido. Use a estrutura trabalhista brasileira clássica.'}
+REGRA DE OURO: 
+→ Se um fato está na entrevista, OBRIGATORIAMENTE deve aparecer na petição.
+→ Se um fato NÃO está na entrevista, NÃO deve aparecer na petição.
+→ Se a entrevista relata xingamentos, assédio, humilhações, você DEVE citar as PALAVRAS EXATAS que foram usadas, entre aspas, na seção DOS FATOS.
 
-PASSO 3 - SELECIONE AS TESES APLICÁVEIS:
-Compare os FATOS da entrevista do cliente com as TESES disponíveis no Modelo Padrão. Selecione APENAS as teses que se encaixam no caso deste cliente específico. Exemplos:
-- Se o cliente relata que não recebia horas extras → inclua a tese de horas extras do modelo
-- Se o cliente relata assédio moral → inclua a tese de dano moral do modelo
-- Se o cliente foi demitido por justa causa indevida → inclua a tese de reversão de justa causa
-- Se uma tese do modelo NÃO tem relação com os fatos do cliente → NÃO inclua essa tese
-${teses.length > 0 ? `\nTeses pré-selecionadas pelo sistema (considere incluí-las): ${teses.join(', ')}` : ''}
+EXEMPLO PRÁTICO: Se a entrevista diz que uma colega chamou a reclamante de "puta", "galinha", "filha da puta", "arrombada", "vagabunda", você DEVE escrever na petição exatamente isso: 'A Reclamante foi alvo de graves ofensas proferidas pela funcionária [nome], que a chamou de "puta", "galinha", "filha da puta", "arrombada" e "vagabunda"...' Não suavize e não omita.
 
-PASSO 4 - GERE A PETIÇÃO ADAPTADA:
-Escreva a petição seguindo a MESMA ESTRUTURA, CABEÇALHO, FORMATAÇÃO e ESTILO DE ESCRITA do Modelo Padrão, mas:
-- QUALIFICAÇÃO: Use os dados REAIS do cliente (extraídos dos documentos, NUNCA do modelo)
-- DOS FATOS: Narre a história REAL do cliente baseada na entrevista (NUNCA copie os fatos do modelo)
-- DO DIREITO: Use APENAS as teses selecionadas no Passo 3, com a mesma argumentação jurídica e estilo do modelo
-- DOS PEDIDOS: Liste apenas os pedidos correspondentes às teses selecionadas, com VALORES calculados com base no salário REAL do cliente
-- VALOR DA CAUSA: Calcule com base nos pedidos reais deste cliente
+═══════════════════════════════════════════════════════
+FLUXO OBRIGATÓRIO:
+═══════════════════════════════════════════════════════
 
-${baseConhecimento ? `\nBASE DE CONHECIMENTO ADICIONAL DO ESCRITÓRIO (use para complementar a argumentação jurídica):\n${baseConhecimento}\n` : ''}
+PASSO 1 - LEIA A ENTREVISTA COM LUPA:
+Leia a Ficha de Entrevista palavra por palavra. Para CADA resposta do cliente, anote:
+- Dados pessoais e da empresa (nome, CPF, CNPJ, datas, salário, cargo)
+- CADA incidente narrado (quem fez o quê, quando, onde, quais palavras foram ditas)
+- Nomes de pessoas envolvidas (colegas, gerentes, supervisores)
+- Tipo de rescisão e motivo
+- Irregularidades (falta de registro, horas extras não pagas, assédio, etc.)
+
+PASSO 2 - CONSULTE OS DOCUMENTOS COMPLEMENTARES:
+Holerites, TRCT, CTPS confirmam e complementam dados da entrevista (salário exato, datas, cargo).
+
+PASSO 3 - CONSULTE O MODELO PADRÃO:
+${templateModelo ? `O escritório forneceu um MODELO PADRÃO que é um "cardápio" com TODAS as teses possíveis.\n\n=== MODELO PADRÃO (CARDÁPIO DE TESES) ===\n${templateModelo}\n=== FIM DO MODELO ===\n\nUse o modelo para:\n- Copiar a ESTRUTURA, CABEÇALHO e ESTILO DE ESCRITA\n- Buscar a ARGUMENTAÇÃO JURÍDICA (artigos, súmulas, jurisprudência) das teses aplicáveis\n- MAS: Inclua APENAS as teses cujos fatos correspondentes existam na entrevista` : 'Nenhum modelo padrão. Use a estrutura trabalhista brasileira clássica.'}
+
+PASSO 4 - GERE A PETIÇÃO:
+- QUALIFICAÇÃO: Dados REAIS dos documentos do cliente
+- DOS FATOS: Narre CADA fato da entrevista com TODOS os detalhes (nomes, datas, xingamentos exatos, situações). NÃO OMITA NADA. Esta seção deve ser longa e detalhada.
+- DO DIREITO: Para cada fato da entrevista, aplique a tese jurídica correspondente do modelo
+- DOS PEDIDOS: APENAS pedidos que decorrem diretamente dos fatos da entrevista, com valores baseados no salário REAL
+- VALOR DA CAUSA: Some todos os pedidos
+
+${teses.length > 0 ? `Teses pré-identificadas (verifique se correspondem aos fatos da entrevista): ${teses.join(', ')}` : ''}
+${baseConhecimento ? `\nBASE DE CONHECIMENTO ADICIONAL:\n${baseConhecimento}\n` : ''}
 
 ═══════════════════════════════════════════════════════
 REGRAS ABSOLUTAS:
 ═══════════════════════════════════════════════════════
-1. NUNCA copie nomes, CPFs, CNPJs, datas ou valores que estejam no Modelo Padrão. Esses dados são de OUTRO cliente.
-2. TODOS os dados factuais (datas de admissão/demissão, salário, endereço) devem vir EXCLUSIVAMENTE dos documentos anexados do cliente.
-3. Se um dado essencial não estiver nos documentos, use "__________" (lacuna).
-4. Adapte os valores dos pedidos ao salário REAL encontrado nos documentos deste cliente.
-5. NÃO inclua teses que não tenham relação com os fatos narrados na entrevista.
-6. NUNCA retorne JSON, código, ou comandos. Entregue APENAS a petição pronta, em texto corrido, pronta para impressão.
+1. A ENTREVISTA MANDA. Todo fato narrado DEVE constar na petição. Não omita NENHUM detalhe, nome ou xingamento.
+2. NÃO INVENTE PEDIDOS que não tenham respaldo nos fatos da entrevista.
+3. NUNCA copie dados (nomes, datas, CNPJs, salários) do Modelo Padrão. Use APENAS os dados dos documentos do cliente.
+4. Se um dado não existe nos documentos, use "__________".
+5. NUNCA retorne JSON, código ou comandos. Entregue APENAS a petição pronta.
 
-DOCUMENTOS DO CLIENTE ${nomeCliente} (LEIA TUDO ABAIXO):`
+DOCUMENTOS DO CLIENTE ${nomeCliente} (LEIA TUDO ABAIXO COM ATENÇÃO MÁXIMA):`
     });
 
     // Nenhuma leitura de arquivo de 'files' aqui para não bater no limite de 4.5MB!
